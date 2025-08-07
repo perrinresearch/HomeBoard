@@ -8,6 +8,7 @@ import { SportsService } from './services/sportsService';
 import { CalendarService } from './services/calendarService';
 import WidgetComponent from './components/Widget';
 import WeatherWidget from './components/WeatherWidget';
+import TimeWidget from './components/TimeWidget';
 import CalendarWidget from './components/CalendarWidget';
 import ChoreWidget from './components/ChoreWidget';
 import SportsWidget from './components/SportsWidget';
@@ -268,6 +269,8 @@ const App: React.FC = () => {
             onLocationsChange={handleWeatherLocationsChange}
           />
         );
+      case 'time':
+        return <TimeWidget />;
       case 'calendar':
         return (
           <CalendarWidget

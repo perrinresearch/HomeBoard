@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { Widget } from '../types';
-import { FiPlus, FiCloud, FiCalendar, FiCheckSquare, FiActivity } from 'react-icons/fi';
+import { FiPlus, FiCloud, FiCalendar, FiCheckSquare, FiActivity, FiClock } from 'react-icons/fi';
 
 interface WidgetSelectorProps {
   onAddWidget: (widget: Widget) => void;
@@ -109,11 +109,18 @@ const Button = styled.button`
 
 const widgetTypes = [
   {
+    type: 'time' as const,
+    title: 'Clock & Date',
+    description: 'Display current time and date in 12-hour format',
+    icon: <FiClock />,
+    defaultSize: { width: 250, height: 200 }
+  },
+  {
     type: 'weather' as const,
-    title: 'Weather & Time',
-    description: 'Display current weather for multiple locations with date and time',
+    title: 'Weather',
+    description: 'Display current weather for multiple locations with hourly and daily forecasts',
     icon: <FiCloud />,
-    defaultSize: { width: 300, height: 400 }
+    defaultSize: { width: 350, height: 500 }
   },
   {
     type: 'calendar' as const,

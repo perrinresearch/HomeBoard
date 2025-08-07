@@ -1,6 +1,6 @@
 export interface Widget {
   id: string;
-  type: 'weather' | 'calendar' | 'chores' | 'sports';
+  type: 'weather' | 'time' | 'calendar' | 'chores' | 'sports';
   title: string;
   position?: { x: number; y: number }; // Optional since we're using grid layout
   size: { width: number; height: number };
@@ -24,6 +24,26 @@ export interface WeatherData {
   humidity: number;
   windSpeed: number;
   feelsLike: number;
+}
+
+export interface HourlyForecast {
+  time: Date;
+  temperature: number;
+  description: string;
+  icon: string;
+  humidity: number;
+  windSpeed: number;
+}
+
+export interface DailyForecast {
+  date: Date;
+  high: number;
+  low: number;
+  description: string;
+  icon: string;
+  humidity: number;
+  windSpeed: number;
+  precipitation: number;
 }
 
 export interface CalendarEvent {
