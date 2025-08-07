@@ -1,4 +1,4 @@
-import { CalendarEvent, CalendarConfig } from '../types';
+import { CalendarEvent, CalendarConfig, SportEvent, Sport, FamilyMember } from '../types';
 
 export class CalendarService {
   static async loadGoogleCalendar(apiKey: string, calendarId: string): Promise<CalendarEvent[]> {
@@ -85,5 +85,33 @@ export class CalendarService {
   static async deleteEvent(eventId: string): Promise<void> {
     // This would delete an event
     console.log('Deleting event:', eventId);
+  }
+
+  static convertSportEventToCalendarEvent(sportEvent: SportEvent, sport: Sport, member: FamilyMember): CalendarEvent {
+    const eventDate = new Date(sportEvent.date);
+    const [startHour, startMinute] = sportEvent.startTime.split(':').map(Number);
+    const [endHour, endMinute] = sportEvent.endTime.split(':').map(Number);
+    
+    const startTime = new Date(eventDate);
+    startTime.setHours(startHour, startMinute, 0, 0);
+    
+    const endTime = new Date(eventDate);
+    endTime.setHours(endHour, endMinute, 0, 0);
+
+    const equipmentText = sportEvent.equipment.length > 0 
+      ? `\nEquipment: ${sportEvent.equipment.join(', ')}` 
+      : '';
+    
+    const notesText = sportEvent.notes ? `\nNotes: ${sportEvent.notes}` : '';
+
+    return {
+      id: sportEvent.id,
+      title: `${sport.name} - ${member.name} (${sportEvent.type})`,
+      start: startTime,
+      end: endTime,
+      description: `Location: ${sportEvent.location}${equipmentText}${notesText}`,
+      location: sportEvent.location,
+      color: sportEvent.type === 'practice' ? '#4CAF50' : '#F44336'
+    };
   }
 } 

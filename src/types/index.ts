@@ -1,6 +1,6 @@
 export interface Widget {
   id: string;
-  type: 'weather' | 'calendar' | 'chores';
+  type: 'weather' | 'calendar' | 'chores' | 'sports';
   title: string;
   position?: { x: number; y: number }; // Optional since we're using grid layout
   size: { width: number; height: number };
@@ -68,9 +68,74 @@ export interface ChoreConfig {
   chores: Chore[];
 }
 
+export interface Sport {
+  id: string;
+  name: string;
+  familyMemberId: string;
+  equipment: string[];
+  practiceSchedule: SportEvent[];
+  gameSchedule: SportEvent[];
+}
+
+export interface SportEvent {
+  id: string;
+  title: string;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  location: string;
+  type: 'practice' | 'game';
+  sportId: string;
+  familyMemberId: string;
+  equipment: string[];
+  notes?: string;
+}
+
+export interface SportsConfig {
+  members: FamilyMember[];
+  sports: Sport[];
+}
+
+export interface ThemeConfig {
+  background: {
+    type: 'color' | 'gradient' | 'image';
+    color?: string;
+    gradient?: {
+      direction: 'to right' | 'to bottom' | 'to bottom right' | 'to bottom left' | 'to top' | 'to top right' | 'to top left' | 'to left';
+      colors: string[];
+    };
+    image?: {
+      url: string;
+      opacity: number;
+    };
+  };
+  header: {
+    type: 'color' | 'gradient';
+    color?: string;
+    gradient?: {
+      direction: 'to right' | 'to bottom' | 'to bottom right' | 'to bottom left' | 'to top' | 'to top right' | 'to top left' | 'to left';
+      colors: string[];
+    };
+  };
+  widgetHeader: {
+    type: 'color' | 'gradient';
+    color?: string;
+    gradient?: {
+      direction: 'to right' | 'to bottom' | 'to bottom right' | 'to bottom left' | 'to top' | 'to top right' | 'to top left' | 'to left';
+      colors: string[];
+    };
+  };
+}
+
+export interface AppSettings {
+  theme: ThemeConfig;
+}
+
 export interface AppState {
   widgets: Widget[];
   weatherLocations: WeatherLocation[];
   calendarConfig: CalendarConfig;
   choreConfig: ChoreConfig;
+  sportsConfig: SportsConfig;
+  settings: AppSettings;
 } 

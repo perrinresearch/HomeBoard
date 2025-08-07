@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { Widget } from '../types';
-import { FiPlus, FiCloud, FiCalendar, FiCheckSquare } from 'react-icons/fi';
+import { FiPlus, FiCloud, FiCalendar, FiCheckSquare, FiActivity } from 'react-icons/fi';
 
 interface WidgetSelectorProps {
   onAddWidget: (widget: Widget) => void;
@@ -128,6 +128,13 @@ const widgetTypes = [
     description: 'Track and manage household chores with family member assignments',
     icon: <FiCheckSquare />,
     defaultSize: { width: 320, height: 400 }
+  },
+  {
+    type: 'sports' as const,
+    title: 'Sports Tracker',
+    description: 'Track sports activities, schedules, and equipment for family members',
+    icon: <FiActivity />,
+    defaultSize: { width: 350, height: 500 }
   }
 ];
 

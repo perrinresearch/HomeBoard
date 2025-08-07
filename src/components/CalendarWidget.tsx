@@ -9,6 +9,7 @@ import { format, isToday, isTomorrow, isYesterday } from 'date-fns';
 interface CalendarWidgetProps {
   config: CalendarConfig;
   onConfigChange: (config: CalendarConfig) => void;
+  sportsEvents?: CalendarEvent[];
 }
 
 const CalendarContainer = styled.div`
@@ -225,7 +226,7 @@ const NoEvents = styled.div`
   padding: 20px;
 `;
 
-const CalendarWidget: React.FC<CalendarWidgetProps> = ({ config, onConfigChange }) => {
+const CalendarWidget: React.FC<CalendarWidgetProps> = ({ config, onConfigChange, sportsEvents = [] }) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showSettings, setShowSettings] = useState(false);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -233,7 +234,7 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ config, onConfigChange 
 
   useEffect(() => {
     loadEvents();
-  }, [config]);
+  }, [config, sportsEvents]);
 
   const loadEvents = async () => {
     setLoading(true);
@@ -258,6 +259,9 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ config, onConfigChange 
       
       // Add local events
       allEvents.push(...config.events);
+      
+      // Add sports events
+      allEvents.push(...sportsEvents);
       
       setEvents(allEvents);
     } catch (error) {

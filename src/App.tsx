@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { DragDropContext, Droppable, DropResult } from 'react-beautiful-dnd';
-import { Widget, WeatherLocation, CalendarConfig, ChoreConfig, AppState } from './types';
+import { Widget, WeatherLocation, CalendarConfig, ChoreConfig, SportsConfig, AppState, CalendarEvent } from './types';
 import { WeatherService } from './services/weatherService';
 import { ChoreService } from './services/choreService';
+import { SportsService } from './services/sportsService';
+import { CalendarService } from './services/calendarService';
 import WidgetComponent from './components/Widget';
 import WeatherWidget from './components/WeatherWidget';
 import CalendarWidget from './components/CalendarWidget';
 import ChoreWidget from './components/ChoreWidget';
+import SportsWidget from './components/SportsWidget';
 import WidgetSelector from './components/WidgetSelector';
 import { FiPlus } from 'react-icons/fi';
 
@@ -111,7 +114,24 @@ const App: React.FC = () => {
       sources: {},
       events: []
     },
-    choreConfig: ChoreService.createDefaultChoreConfig()
+    choreConfig: ChoreService.createDefaultChoreConfig(),
+    sportsConfig: SportsService.createDefaultSportsConfig(),
+    settings: {
+      theme: {
+        background: {
+          type: 'color',
+          color: '#f5f5f5'
+        },
+        header: {
+          type: 'color',
+          color: '#667eea'
+        },
+        widgetHeader: {
+          type: 'color',
+          color: '#667eea'
+        }
+      }
+    }
   });
 
   const [showWidgetSelector, setShowWidgetSelector] = useState(false);
@@ -232,6 +252,13 @@ const App: React.FC = () => {
     }));
   };
 
+  const handleSportsConfigChange = (config: SportsConfig) => {
+    setAppState(prev => ({
+      ...prev,
+      sportsConfig: config
+    }));
+  };
+
   const renderWidgetContent = (widget: Widget) => {
     switch (widget.type) {
       case 'weather':
@@ -246,6 +273,14 @@ const App: React.FC = () => {
           <CalendarWidget
             config={appState.calendarConfig}
             onConfigChange={handleCalendarConfigChange}
+            sportsEvents={SportsService.getAllSportEvents(appState.sportsConfig).map(event => {
+              const sport = appState.sportsConfig.sports.find(s => s.id === event.sportId);
+              const member = appState.sportsConfig.members.find(m => m.id === event.familyMemberId);
+              if (sport && member) {
+                return CalendarService.convertSportEventToCalendarEvent(event, sport, member);
+              }
+              return null;
+            }).filter(Boolean) as CalendarEvent[]}
           />
         );
       case 'chores':
@@ -253,6 +288,13 @@ const App: React.FC = () => {
           <ChoreWidget
             config={appState.choreConfig}
             onConfigChange={handleChoreConfigChange}
+          />
+        );
+      case 'sports':
+        return (
+          <SportsWidget
+            config={appState.sportsConfig}
+            onConfigChange={handleSportsConfigChange}
           />
         );
       default:
