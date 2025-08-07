@@ -29,4 +29,7 @@ yarn-error.log*
 *.swo
 
 # OS
-Thumbs.db 
+Thumbs.db
+
+# Current pat
+.currentpat

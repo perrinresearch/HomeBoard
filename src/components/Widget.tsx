@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { Draggable } from 'react-beautiful-dnd';
-import { Widget as WidgetType } from '../types';
+import { Widget as WidgetType, AppSettings } from '../types';
+import { SettingsService } from '../services/settingsService';
 import { FiX, FiMaximize2, FiMinimize2, FiColumns } from 'react-icons/fi';
 
 interface WidgetProps {
@@ -11,6 +12,7 @@ interface WidgetProps {
   onResize: (id: string, size: { width: number; height: number }) => void;
   onColumnSpanChange: (id: string, columnSpan: number) => void;
   children: React.ReactNode;
+  settings?: AppSettings;
 }
 
 const WidgetContainer = styled.div<{ size: { width: number; height: number }; columnSpan: number; isDragging?: boolean }>`
@@ -33,12 +35,12 @@ const WidgetContainer = styled.div<{ size: { width: number; height: number }; co
   }
 `;
 
-const WidgetHeader = styled.div`
+const WidgetHeader = styled.div<{ background: string }>`
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: ${props => props.background};
   color: white;
   font-weight: 600;
   font-size: 14px;
@@ -111,7 +113,7 @@ const HoldText = styled.div`
   font-weight: 600;
 `;
 
-const Widget: React.FC<WidgetProps> = ({ widget, index, onRemove, onResize, onColumnSpanChange, children }) => {
+const Widget: React.FC<WidgetProps> = ({ widget, index, onRemove, onResize, onColumnSpanChange, children, settings }) => {
   const [isHolding, setIsHolding] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -202,6 +204,11 @@ const Widget: React.FC<WidgetProps> = ({ widget, index, onRemove, onResize, onCo
     };
   }, []);
 
+  // Generate widget header background CSS
+  const widgetHeaderCSS = settings 
+    ? SettingsService.generateCSSWidgetHeader(settings.theme.widgetHeader)
+    : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+
   return (
     <Draggable draggableId={widget.id} index={index}>
       {(provided, snapshot) => (
@@ -240,7 +247,7 @@ const Widget: React.FC<WidgetProps> = ({ widget, index, onRemove, onResize, onCo
               <HoldText>Hold to drag ({Math.round(holdProgress)}%)</HoldText>
             </HoldIndicator>
           )}
-          <WidgetHeader>
+          <WidgetHeader background={widgetHeaderCSS}>
             <span>{widget.title}</span>
             <WidgetControls>
               <ControlButton 

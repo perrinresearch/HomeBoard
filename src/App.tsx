@@ -360,18 +360,19 @@ const App: React.FC = () => {
                       </HeaderButton>
                     </EmptyState>
                   ) : (
-                    appState.widgets.map((widget, index) => (
-                      <WidgetComponent
-                        key={widget.id}
-                        widget={widget}
-                        index={index}
-                        onRemove={handleRemoveWidget}
-                        onResize={handleResizeWidget}
-                        onColumnSpanChange={handleColumnSpanChange}
-                      >
-                        {renderWidgetContent(widget)}
-                      </WidgetComponent>
-                    ))
+                                         appState.widgets.map((widget, index) => (
+                       <WidgetComponent
+                         key={widget.id}
+                         widget={widget}
+                         index={index}
+                         onRemove={handleRemoveWidget}
+                         onResize={handleResizeWidget}
+                         onColumnSpanChange={handleColumnSpanChange}
+                         settings={appState.settings}
+                       >
+                         {renderWidgetContent(widget)}
+                       </WidgetComponent>
+                     ))
                   )}
                 </WidgetGrid>
                 {provided.placeholder}
