@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { DragDropContext, Droppable, DropResult } from 'react-beautiful-dnd';
-import { Widget, WeatherLocation, CalendarConfig, ChoreConfig, SportsConfig, AppState, CalendarEvent } from './types';
+import { Widget, WeatherLocation, CalendarConfig, ChoreConfig, SportsConfig, AppState, CalendarEvent, AppSettings } from './types';
 import { WeatherService } from './services/weatherService';
 import { ChoreService } from './services/choreService';
 import { SportsService } from './services/sportsService';
 import { CalendarService } from './services/calendarService';
+import { SettingsService } from './services/settingsService';
 import WidgetComponent from './components/Widget';
 import WeatherWidget from './components/WeatherWidget';
 import TimeWidget from './components/TimeWidget';
@@ -13,11 +14,12 @@ import CalendarWidget from './components/CalendarWidget';
 import ChoreWidget from './components/ChoreWidget';
 import SportsWidget from './components/SportsWidget';
 import WidgetSelector from './components/WidgetSelector';
-import { FiPlus } from 'react-icons/fi';
+import Settings from './components/Settings';
+import { FiPlus, FiSettings } from 'react-icons/fi';
 
-const AppContainer = styled.div`
+const AppContainer = styled.div<{ background: string }>`
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: ${props => props.background};
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 `;
@@ -43,7 +45,7 @@ const Title = styled.h1`
   font-weight: 700;
 `;
 
-const AddWidgetButton = styled.button`
+const HeaderButton = styled.button`
   background: rgba(255, 255, 255, 0.2);
   color: white;
   border: 2px solid rgba(255, 255, 255, 0.3);
@@ -62,6 +64,11 @@ const AddWidgetButton = styled.button`
     border-color: rgba(255, 255, 255, 0.5);
     transform: translateY(-2px);
   }
+`;
+
+const HeaderControls = styled.div`
+  display: flex;
+  gap: 12px;
 `;
 
 const WidgetGrid = styled.div<{ isDraggingOver?: boolean }>`
@@ -136,6 +143,7 @@ const App: React.FC = () => {
   });
 
   const [showWidgetSelector, setShowWidgetSelector] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Load initial weather location (current location)
   useEffect(() => {
@@ -260,6 +268,13 @@ const App: React.FC = () => {
     }));
   };
 
+  const handleSettingsChange = (settings: AppSettings) => {
+    setAppState(prev => ({
+      ...prev,
+      settings: settings
+    }));
+  };
+
   const renderWidgetContent = (widget: Widget) => {
     switch (widget.type) {
       case 'weather':
@@ -305,15 +320,23 @@ const App: React.FC = () => {
     }
   };
 
+  const backgroundCSS = SettingsService.generateCSSBackground(appState.settings.theme.background);
+
   return (
-    <AppContainer>
+    <AppContainer background={backgroundCSS}>
       <Dashboard>
         <Header>
           <Title>HomeBoard</Title>
-          <AddWidgetButton onClick={() => setShowWidgetSelector(true)}>
-            <FiPlus size={20} />
-            Add Widget
-          </AddWidgetButton>
+          <HeaderControls>
+            <HeaderButton onClick={() => setShowSettings(true)}>
+              <FiSettings size={20} />
+              Settings
+            </HeaderButton>
+            <HeaderButton onClick={() => setShowWidgetSelector(true)}>
+              <FiPlus size={20} />
+              Add Widget
+            </HeaderButton>
+          </HeaderControls>
         </Header>
 
         <DragDropContext onDragEnd={handleDragEnd}>
@@ -331,10 +354,10 @@ const App: React.FC = () => {
                       <EmptyStateText>
                         Get started by adding your first widget to organize your family's daily activities.
                       </EmptyStateText>
-                      <AddWidgetButton onClick={() => setShowWidgetSelector(true)}>
+                      <HeaderButton onClick={() => setShowWidgetSelector(true)}>
                         <FiPlus size={20} />
                         Add Your First Widget
-                      </AddWidgetButton>
+                      </HeaderButton>
                     </EmptyState>
                   ) : (
                     appState.widgets.map((widget, index) => (
@@ -361,6 +384,14 @@ const App: React.FC = () => {
           <WidgetSelector
             onAddWidget={handleAddWidget}
             onClose={() => setShowWidgetSelector(false)}
+          />
+        )}
+
+        {showSettings && (
+          <Settings
+            settings={appState.settings}
+            onSettingsChange={handleSettingsChange}
+            onClose={() => setShowSettings(false)}
           />
         )}
       </Dashboard>
