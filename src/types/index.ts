@@ -46,6 +46,7 @@ export interface CalendarEvent {
   source?: 'local' | 'sports' | 'google' | 'microsoft' | 'apple';
   calendarName?: string;
   familyMemberId?: string;
+  familyMemberIds?: string[];
   allDay?: boolean;
 }
 

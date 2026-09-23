@@ -26,7 +26,10 @@ STATE_PATH = Path("/var/lib/homeboard/calendar.json")
 PENDING_PATH = Path("/var/lib/homeboard/oauth-pending.json")
 CACHE_PATH = Path("/tmp/homeboard-calendar-events.json")
 ENV_PATH = Path("/etc/homeboard/calendar.env")
+HOUSEHOLD_PATH = Path("/var/lib/homeboard/household.json")
+HOUSEHOLD_ID = re.compile(r"^[A-Za-z0-9]{10,128}$")
 SET_TIMEZONE = Path("/usr/local/lib/homeboard/set-timezone")
+WIFI_HELPER = Path("/usr/local/lib/homeboard/wifi-helper")
 ZONEINFO = Path("/usr/share/zoneinfo")
 ZONE_NAME = re.compile(r"^[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)*$")
 CACHE_SECONDS = 300
@@ -72,6 +75,42 @@ def normalize_color(value):
     return ""
 
 
+MEMBER_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def member_ids_of(item):
+    """People assigned to a calendar. Older saves stored a single familyMemberId."""
+    raw = item.get("familyMemberIds") if isinstance(item, dict) else None
+    ids = []
+    if isinstance(raw, list):
+        for value in raw:
+            text = str(value or "").strip()
+            if text and text not in ids and MEMBER_ID.match(text):
+                ids.append(text)
+    if ids:
+        return ids
+    single = str((item or {}).get("familyMemberId") or "").strip()
+    return [single] if MEMBER_ID.match(single) else []
+
+
+def write_members(item, ids):
+    clean = []
+    for value in ids:
+        text = str(value or "").strip()
+        if text and text not in clean and MEMBER_ID.match(text):
+            clean.append(text)
+    item["familyMemberIds"] = clean
+    item["familyMemberId"] = clean[0] if len(clean) == 1 else ""
+
+
+def owner_fields(item):
+    ids = member_ids_of(item or {})
+    return {
+        "familyMemberIds": ids,
+        "familyMemberId": ids[0] if len(ids) == 1 else "",
+    }
+
+
 def merge_calendars(existing, fresh):
     """Refresh names and colors from the provider without losing local choices."""
     known = {item["id"]: item for item in existing or []}
@@ -82,18 +121,18 @@ def merge_calendars(existing, fresh):
             merged.append({
                 **item,
                 "enabled": old.get("enabled", True),
-                "familyMemberId": old.get("familyMemberId", ""),
+                **owner_fields(old),
             })
         else:
-            merged.append({**item, "enabled": False, "familyMemberId": ""})
+            merged.append({**item, "enabled": False, "familyMemberId": "", "familyMemberIds": []})
     return merged
 
 
-def refresh_calendar_list(provider, lister, access):
+def refresh_calendar_list(provider, account_id, lister, access):
     data = state()
-    account = data.get(provider)
+    account = next((item for item in data.get(provider, []) if item.get("id") == account_id), None)
     if not account:
-        return account
+        return None
     try:
         fresh = lister(access)
     except Exception as error:  # noqa: BLE001 - stale colors beat no events
@@ -167,7 +206,28 @@ def write_json(path, data, mode=0o600):
 
 
 def state():
-    return read_json(STATE_PATH, {"google": None, "microsoft": None, "apple": []})
+    return normalize_accounts(read_json(STATE_PATH, {"google": [], "microsoft": [], "apple": []}))
+
+
+def normalize_accounts(data, persist=True):
+    """Keep every Google and Microsoft sign-in. Older boards stored one account each."""
+    changed = False
+    for provider in ("google", "microsoft"):
+        raw = data.get(provider)
+        if isinstance(raw, dict):
+            account = dict(raw)
+            account.setdefault("id", secrets.token_hex(8))
+            data[provider] = [account]
+            changed = True
+        elif not isinstance(raw, list):
+            data[provider] = []
+            changed = True
+    if not isinstance(data.get("apple"), list):
+        data["apple"] = []
+        changed = True
+    if changed and persist:
+        save_state(data)
+    return data
 
 
 def save_state(data):
@@ -248,7 +308,7 @@ def start_google():
         "response_type": "code",
         "scope": GOOGLE_SCOPE,
         "access_type": "offline",
-        "prompt": "consent",
+        "prompt": "select_account consent",
         "code_challenge": challenge,
         "code_challenge_method": "S256",
         "state": state_token,
@@ -269,6 +329,7 @@ def start_microsoft():
         "scope": MS_SCOPE,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
+        "prompt": "select_account",
         "state": state_token,
     })
     return f"{MS_AUTH}?{query}"
@@ -276,6 +337,34 @@ def start_microsoft():
 
 def exchange(url, fields):
     return http_json(url, method="POST", body=fields, form=True)
+
+
+def upsert_oauth_account(provider, email, refresh_token, calendars):
+    data = state()
+    accounts = data.setdefault(provider, [])
+    email_key = (email or "").strip().lower()
+    previous = next((item for item in accounts if (item.get("email") or "").strip().lower() == email_key and email_key), None)
+    if previous is None:
+        if not refresh_token:
+            raise RuntimeError(f"{provider.title()} did not return a refresh token. Disconnect and connect again.")
+        account = {
+            "id": secrets.token_hex(8),
+            "email": email,
+            "refresh_token": refresh_token,
+            "calendars": calendars,
+        }
+        accounts.append(account)
+    else:
+        previous["email"] = email
+        previous["refresh_token"] = refresh_token or previous.get("refresh_token")
+        previous["calendars"] = merge_calendars(previous.get("calendars"), calendars)
+        account = previous
+        if not account.get("refresh_token"):
+            raise RuntimeError(f"{provider.title()} did not return a refresh token. Disconnect and connect again.")
+    save_state(data)
+    ACCESS.pop(f"{provider}:{account['id']}", None)
+    CACHE_PATH.unlink(missing_ok=True)
+    return account["id"]
 
 
 def finish_google(code, state_token):
@@ -293,18 +382,7 @@ def finish_google(code, state_token):
         "https://www.googleapis.com/oauth2/v2/userinfo",
         headers={"Authorization": f"Bearer {access}"},
     )
-    calendars = list_google_calendars(access)
-    data = state()
-    previous = data.get("google") or {}
-    data["google"] = {
-        "refresh_token": token.get("refresh_token") or previous.get("refresh_token"),
-        "email": profile.get("email", ""),
-        "calendars": merge_calendars(previous["calendars"], calendars) if previous.get("calendars") else calendars,
-    }
-    if not data["google"]["refresh_token"]:
-        raise RuntimeError("Google did not return a refresh token. Disconnect and connect again.")
-    save_state(data)
-    CACHE_PATH.unlink(missing_ok=True)
+    return upsert_oauth_account("google", profile.get("email", ""), token.get("refresh_token"), list_google_calendars(access))
 
 
 def finish_microsoft(code, state_token):
@@ -320,18 +398,8 @@ def finish_microsoft(code, state_token):
     })
     access = token["access_token"]
     profile = http_json(f"{MS_GRAPH}/me", headers={"Authorization": f"Bearer {access}"})
-    calendars = list_microsoft_calendars(access)
-    data = state()
-    previous = data.get("microsoft") or {}
-    data["microsoft"] = {
-        "refresh_token": token.get("refresh_token") or previous.get("refresh_token"),
-        "email": profile.get("mail") or profile.get("userPrincipalName") or "",
-        "calendars": merge_calendars(previous["calendars"], calendars) if previous.get("calendars") else calendars,
-    }
-    if not data["microsoft"]["refresh_token"]:
-        raise RuntimeError("Microsoft did not return a refresh token. Disconnect and connect again.")
-    save_state(data)
-    CACHE_PATH.unlink(missing_ok=True)
+    email = profile.get("mail") or profile.get("userPrincipalName") or ""
+    return upsert_oauth_account("microsoft", email, token.get("refresh_token"), list_microsoft_calendars(access))
 
 
 ACCESS = {}
@@ -346,8 +414,7 @@ def cached_access(provider, refresher):
     return token
 
 
-def google_access():
-    account = state().get("google") or {}
+def google_access(account):
     refresh = account.get("refresh_token")
     if not refresh:
         raise RuntimeError("Google is not connected")
@@ -361,12 +428,12 @@ def google_access():
         })
         return token["access_token"], token.get("expires_in", 3600)
 
-    return cached_access("google", refresh_call)
+    return cached_access(f"google:{account['id']}", refresh_call)
 
 
-def microsoft_access():
-    account = state().get("microsoft") or {}
+def microsoft_access(account):
     refresh = account.get("refresh_token")
+    account_id = account.get("id")
     if not refresh:
         raise RuntimeError("Microsoft is not connected")
 
@@ -378,13 +445,16 @@ def microsoft_access():
             "grant_type": "refresh_token",
             "scope": MS_SCOPE,
         })
-        data = state()
-        if token.get("refresh_token") and data.get("microsoft"):
-            data["microsoft"]["refresh_token"] = token["refresh_token"]
-            save_state(data)
+        if token.get("refresh_token"):
+            data = state()
+            for item in data.get("microsoft", []):
+                if item.get("id") == account_id:
+                    item["refresh_token"] = token["refresh_token"]
+                    save_state(data)
+                    break
         return token["access_token"], token.get("expires_in", 3600)
 
-    return cached_access("microsoft", refresh_call)
+    return cached_access(f"microsoft:{account_id}", refresh_call)
 
 
 def list_google_calendars(access):
@@ -435,11 +505,9 @@ def enabled_ids(account):
     return [item["id"] for item in (account or {}).get("calendars", []) if item.get("enabled", True)]
 
 
-def google_events(start, end):
-    if not state().get("google"):
-        return []
-    access = google_access()
-    account = refresh_calendar_list("google", list_google_calendars, access)
+def google_account_events(account, start, end):
+    access = google_access(account)
+    account = refresh_calendar_list("google", account["id"], list_google_calendars, access) or account
     try:
         palette = google_palette(access)
     except Exception as error:  # noqa: BLE001 - calendar colors still apply
@@ -455,7 +523,7 @@ def google_events(start, end):
     })
     for calendar_id in enabled_ids(account):
         name = next((c["name"] for c in account["calendars"] if c["id"] == calendar_id), calendar_id)
-        owner = owner_of(account["calendars"], calendar_id)
+        calendar = next((c for c in account["calendars"] if c["id"] == calendar_id), {})
         base_color = calendar_color(account, calendar_id, "google")
         encoded = urllib.parse.quote(calendar_id, safe="")
         payload = http_json(
@@ -468,7 +536,7 @@ def google_events(start, end):
             start_at = item.get("start", {})
             end_at = item.get("end", {})
             events.append({
-                "id": f"google:{calendar_id}:{item.get('id')}",
+                "id": f"google:{account['id']}:{calendar_id}:{item.get('id')}",
                 "title": item.get("summary") or "(No title)",
                 "start": start_at.get("dateTime") or start_at.get("date"),
                 "end": end_at.get("dateTime") or end_at.get("date"),
@@ -476,18 +544,26 @@ def google_events(start, end):
                 "description": item.get("description") or "",
                 "source": "google",
                 "calendarName": name,
-                "familyMemberId": owner,
+                **owner_fields(calendar),
                 "color": palette.get(str(item.get("colorId") or ""), base_color),
                 "allDay": "date" in start_at and "dateTime" not in start_at,
             })
     return events
 
 
-def microsoft_events(start, end):
-    if not state().get("microsoft"):
-        return []
-    access = microsoft_access()
-    account = refresh_calendar_list("microsoft", list_microsoft_calendars, access)
+def google_events(start, end):
+    events = []
+    for account in state().get("google", []):
+        try:
+            events.extend(google_account_events(account, start, end))
+        except Exception as error:  # noqa: BLE001 - one Gmail account must not hide the others
+            print(f"google {account.get('email')}: {error}")
+    return events
+
+
+def microsoft_account_events(account, start, end):
+    access = microsoft_access(account)
+    account = refresh_calendar_list("microsoft", account["id"], list_microsoft_calendars, access) or account
     events = []
     query = urllib.parse.urlencode({
         "startDateTime": iso(start),
@@ -499,7 +575,7 @@ def microsoft_events(start, end):
     }
     for calendar_id in enabled_ids(account):
         name = next((c["name"] for c in account["calendars"] if c["id"] == calendar_id), "Outlook")
-        owner = owner_of(account["calendars"], calendar_id)
+        calendar = next((c for c in account["calendars"] if c["id"] == calendar_id), {})
         base_color = calendar_color(account, calendar_id, "microsoft")
         encoded = urllib.parse.quote(calendar_id, safe="")
         payload = http_json(
@@ -510,7 +586,7 @@ def microsoft_events(start, end):
             start_at = item.get("start", {})
             end_at = item.get("end", {})
             events.append({
-                "id": f"microsoft:{item.get('id')}",
+                "id": f"microsoft:{account['id']}:{item.get('id')}",
                 "title": item.get("subject") or "(No title)",
                 "start": utc_stamp(start_at.get("dateTime")),
                 "end": utc_stamp(end_at.get("dateTime")),
@@ -518,10 +594,20 @@ def microsoft_events(start, end):
                 "description": item.get("bodyPreview") or "",
                 "source": "microsoft",
                 "calendarName": name,
-                "familyMemberId": owner,
+                **owner_fields(calendar),
                 "color": base_color,
                 "allDay": bool(item.get("isAllDay")),
             })
+    return events
+
+
+def microsoft_events(start, end):
+    events = []
+    for account in state().get("microsoft", []):
+        try:
+            events.extend(microsoft_account_events(account, start, end))
+        except Exception as error:  # noqa: BLE001 - one Microsoft account must not hide the others
+            print(f"microsoft {account.get('email')}: {error}")
     return events
 
 
@@ -654,13 +740,31 @@ def apple_events(start, end):
         if color != feed.get("color"):
             feed["color"] = color
             changed = True
-        owner = feed.get("familyMemberId") or ""
+        fields = owner_fields(feed)
         for event in parsed:
-            event["familyMemberId"] = owner
+            event.update(fields)
         events.extend(parsed)
     if changed:
         save_state(data)
     return events
+
+
+def remember_household(household_id):
+    household_id = (household_id or "").strip()
+    if not HOUSEHOLD_ID.match(household_id):
+        raise RuntimeError("Invalid household id")
+    write_json(HOUSEHOLD_PATH, {"id": household_id})
+    return household_id
+
+
+def publish_events():
+    payload = collect_events()
+    try:
+        from firestore_push import push_remote_events
+        push_remote_events(payload.get("events") or [])
+    except Exception as error:  # noqa: BLE001 - calendar reads must still succeed
+        print("firestore push failed:", error)
+    return payload
 
 
 def collect_events():
@@ -687,8 +791,9 @@ def collect_events():
 
 def public_account(account):
     if not account:
-        return {"connected": False, "calendars": []}
+        return None
     return {
+        "id": account.get("id") or "",
         "connected": True,
         "email": account.get("email") or "",
         "calendars": [
@@ -696,7 +801,7 @@ def public_account(account):
                 "id": item["id"],
                 "name": item.get("name") or item["id"],
                 "enabled": bool(item.get("enabled", True)),
-                "familyMemberId": item.get("familyMemberId") or "",
+                **owner_fields(item),
                 "color": item.get("color") or "",
             }
             for item in account.get("calendars", [])
@@ -707,59 +812,58 @@ def public_account(account):
 def sources_payload():
     data = state()
     return {
-        "google": public_account(data.get("google")),
-        "microsoft": public_account(data.get("microsoft")),
+        "google": [public_account(item) for item in data.get("google", [])],
+        "microsoft": [public_account(item) for item in data.get("microsoft", [])],
         "apple": [{
             "id": item["id"],
             "name": item.get("name") or "Apple",
-            "familyMemberId": item.get("familyMemberId") or "",
+            **owner_fields(item),
             "color": item.get("color") or COLORS["apple"],
         } for item in data.get("apple", [])],
     }
 
 
-def owner_of(calendars, calendar_id):
-    for item in calendars:
-        if item["id"] == calendar_id:
-            return item.get("familyMemberId") or ""
-    return ""
-
-
-def set_owner(provider, calendar_id, family_member_id):
+def set_owner(provider, calendar_id, family_member_id, account_id="", members=None, action="set"):
     data = state()
-    owner = family_member_id or ""
     if provider == "apple":
-        for item in data.get("apple", []):
-            if item["id"] == calendar_id:
-                item["familyMemberId"] = owner
-                save_state(data)
-                CACHE_PATH.unlink(missing_ok=True)
-                return
+        item = next((entry for entry in data.get("apple", []) if entry["id"] == calendar_id), None)
+    else:
+        item = find_calendar(data, provider, calendar_id, account_id)
+    if not item:
         raise RuntimeError("Calendar not found")
-    account = data.get(provider)
-    if not account:
-        raise RuntimeError(f"{provider} is not connected")
-    for item in account.get("calendars", []):
-        if item["id"] == calendar_id:
-            item["familyMemberId"] = owner
-            save_state(data)
-            CACHE_PATH.unlink(missing_ok=True)
-            return
-    raise RuntimeError("Calendar not found")
+    current = member_ids_of(item)
+    if isinstance(members, list):
+        write_members(item, members)
+    elif action == "add":
+        if not family_member_id:
+            raise RuntimeError("Choose a person")
+        write_members(item, current + [family_member_id])
+    elif action == "remove":
+        write_members(item, [value for value in current if value != family_member_id])
+    else:
+        write_members(item, [family_member_id] if family_member_id else [])
+    save_state(data)
+    CACHE_PATH.unlink(missing_ok=True)
 
 
-def set_enabled(provider, calendar_id, enabled):
+def find_calendar(data, provider, calendar_id, account_id=""):
+    for account in data.get(provider, []):
+        if account_id and account.get("id") != account_id:
+            continue
+        for item in account.get("calendars", []):
+            if item["id"] == calendar_id:
+                return item
+    return None
+
+
+def set_enabled(provider, calendar_id, enabled, account_id=""):
     data = state()
-    account = data.get(provider)
-    if not account:
-        raise RuntimeError(f"{provider} is not connected")
-    for item in account.get("calendars", []):
-        if item["id"] == calendar_id:
-            item["enabled"] = bool(enabled)
-            save_state(data)
-            CACHE_PATH.unlink(missing_ok=True)
-            return
-    raise RuntimeError("Calendar not found")
+    item = find_calendar(data, provider, calendar_id, account_id)
+    if not item:
+        raise RuntimeError("Calendar not found")
+    item["enabled"] = bool(enabled)
+    save_state(data)
+    CACHE_PATH.unlink(missing_ok=True)
 
 
 def add_apple(url):
@@ -785,11 +889,15 @@ def delete_apple(feed_id):
     CACHE_PATH.unlink(missing_ok=True)
 
 
-def disconnect(provider):
+def disconnect(provider, account_id):
     data = state()
-    data[provider] = None
+    accounts = data.get(provider) or []
+    kept = [item for item in accounts if item.get("id") != account_id]
+    if len(kept) == len(accounts):
+        raise RuntimeError("Account not found")
+    data[provider] = kept
     save_state(data)
-    ACCESS.pop(provider, None)
+    ACCESS.pop(f"{provider}:{account_id}", None)
     CACHE_PATH.unlink(missing_ok=True)
 
 
@@ -869,6 +977,140 @@ def set_timezone(zone):
     return current_timezone()
 
 
+def command_path(name):
+    for folder in ("/usr/sbin", "/sbin", "/usr/bin", "/bin"):
+        path = Path(folder) / name
+        if path.is_file() and os.access(path, os.X_OK):
+            return str(path)
+    return name
+
+
+def run_cmd(args, timeout=10):
+    try:
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
+def wifi_iface():
+    result = run_cmd([command_path("iw"), "dev"], timeout=8)
+    if result and result.returncode == 0:
+        for line in result.stdout.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[0] == "Interface" and re.match(r"^[A-Za-z0-9._-]+$", parts[1]):
+                return parts[1]
+    return "wlan0"
+
+
+def read_wifi_status():
+    iface = wifi_iface()
+    connected = False
+    ssid = ""
+    signal = None
+    result = run_cmd([command_path("iw"), "dev", iface, "link"], timeout=8)
+    if result and result.returncode == 0:
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("SSID:"):
+                ssid = stripped.split(":", 1)[1].strip()
+                connected = bool(ssid)
+            elif stripped.startswith("signal:"):
+                match = re.search(r"(-?\d+)", stripped)
+                if match:
+                    signal = int(match.group(1))
+            elif stripped.startswith("Connected to ") and "SSID:" not in result.stdout:
+                connected = True
+    ip = ""
+    addr = run_cmd([command_path("ip"), "-4", "-o", "addr", "show", "dev", iface], timeout=5)
+    if addr and addr.returncode == 0:
+        match = re.search(r"inet (\d+\.\d+\.\d+\.\d+)", addr.stdout)
+        if match:
+            ip = match.group(1)
+    if not ssid and not ip:
+        connected = False
+    return {
+        "connected": connected,
+        "ssid": ssid,
+        "ip": ip,
+        "signal": signal,
+        "iface": iface,
+    }
+
+
+def run_wifi(args, stdin=None, timeout=20):
+    if not WIFI_HELPER.is_file():
+        raise RuntimeError("Wi-Fi helper is not installed on this board")
+    result = subprocess.run(
+        ["sudo", "-n", str(WIFI_HELPER), *args],
+        input=stdin,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "Wi-Fi request failed").strip()
+        raise RuntimeError(detail.splitlines()[-1] if detail else "Wi-Fi request failed")
+    try:
+        return json.loads(result.stdout or "{}")
+    except json.JSONDecodeError as error:
+        raise RuntimeError("Wi-Fi helper returned invalid data") from error
+
+
+def format_wifi(data):
+    return {
+        "ok": True,
+        "connected": bool(data.get("connected")),
+        "ssid": str(data.get("ssid") or ""),
+        "ip": str(data.get("ip") or ""),
+        "signal": data.get("signal"),
+        "iface": str(data.get("iface") or ""),
+    }
+
+
+def wifi_status():
+    # Status does not need root. Avoid sudo so Settings still works if the
+    # helper or sudoers file was not installed yet.
+    return format_wifi(read_wifi_status())
+
+
+def wifi_scan():
+    data = run_wifi(["scan"], timeout=30)
+    networks = []
+    for item in data.get("networks") or []:
+        ssid = str(item.get("ssid") or "").strip()
+        if not ssid:
+            continue
+        signal = item.get("signal")
+        networks.append({
+            "ssid": ssid,
+            "signal": int(signal) if isinstance(signal, (int, float)) else None,
+            "security": "wpa" if item.get("security") == "wpa" else "open",
+        })
+    return {"networks": networks}
+
+
+def set_wifi(ssid, password):
+    ssid = str(ssid or "").strip()
+    password = str(password or "")
+    if not ssid or "\n" in ssid or "\r" in ssid:
+        raise RuntimeError("Enter a Wi-Fi name")
+    if len(ssid.encode("utf-8")) > 32:
+        raise RuntimeError("Wi-Fi name is too long")
+    if password:
+        if "\n" in password or "\r" in password:
+            raise RuntimeError("Invalid Wi-Fi password")
+        if not 8 <= len(password) <= 63:
+            raise RuntimeError("Password must be 8 to 63 characters")
+    return format_wifi(run_wifi(["apply"], stdin=json.dumps({"ssid": ssid, "password": password}), timeout=45))
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print("%s - %s" % (self.address_string(), fmt % args))
@@ -912,21 +1154,27 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/sources":
                 self.send_json(sources_payload())
             elif path == "/events":
-                self.send_json(collect_events())
+                self.send_json(publish_events())
+            elif path == "/household":
+                self.send_json({"id": read_json(HOUSEHOLD_PATH, {}).get("id") or ""})
             elif path == "/timezone":
                 self.send_json({"timezone": current_timezone()})
             elif path == "/timezones":
                 self.send_json({"timezones": list_timezones()})
+            elif path == "/wifi":
+                self.send_json(wifi_status())
+            elif path == "/wifi/scan":
+                self.send_json(wifi_scan())
             elif path == "/google/start":
                 self.redirect(start_google())
             elif path == "/microsoft/start":
                 self.redirect(start_microsoft())
             elif path == "/google/callback":
-                finish_google(query.get("code", [""])[0], query.get("state", [""])[0])
-                self.redirect("/?connected=google")
+                account_id = finish_google(query.get("code", [""])[0], query.get("state", [""])[0])
+                self.redirect(f"/?connected=google&account={urllib.parse.quote(account_id)}")
             elif path == "/microsoft/callback":
-                finish_microsoft(query.get("code", [""])[0], query.get("state", [""])[0])
-                self.redirect("/?connected=microsoft")
+                account_id = finish_microsoft(query.get("code", [""])[0], query.get("state", [""])[0])
+                self.redirect(f"/?connected=microsoft&account={urllib.parse.quote(account_id)}")
             else:
                 self.send_json({"error": "Not found"}, 404)
         except Exception as error:  # noqa: BLE001
@@ -943,17 +1191,29 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/apple":
                 self.send_json(add_apple(body.get("url", "")))
             elif path == "/owner":
-                set_owner(body.get("provider", ""), body.get("id", ""), body.get("familyMemberId", ""))
+                raw_members = body.get("familyMemberIds", None)
+                set_owner(
+                    body.get("provider", ""),
+                    body.get("id", ""),
+                    body.get("familyMemberId", ""),
+                    body.get("accountId", ""),
+                    raw_members if isinstance(raw_members, list) else None,
+                    body.get("action") or "set",
+                )
                 self.send_json(sources_payload())
             elif path == "/google/calendars":
-                set_enabled("google", body.get("id", ""), body.get("enabled", True))
+                set_enabled("google", body.get("id", ""), body.get("enabled", True), body.get("accountId", ""))
                 self.send_json(sources_payload())
             elif path == "/microsoft/calendars":
-                set_enabled("microsoft", body.get("id", ""), body.get("enabled", True))
+                set_enabled("microsoft", body.get("id", ""), body.get("enabled", True), body.get("accountId", ""))
                 self.send_json(sources_payload())
             elif path == "/timezone":
                 zone = set_timezone(body.get("timezone", ""))
                 self.send_json({"timezone": zone, "reload": True})
+            elif path == "/wifi":
+                self.send_json(set_wifi(body.get("ssid", ""), body.get("password", "")))
+            elif path == "/household":
+                self.send_json({"id": remember_household(body.get("id", ""))})
             else:
                 self.send_json({"error": "Not found"}, 404)
         except Exception as error:  # noqa: BLE001
@@ -965,9 +1225,9 @@ class Handler(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(parsed.query)
         try:
             if path == "/google":
-                disconnect("google")
+                disconnect("google", query.get("id", [""])[0])
             elif path == "/microsoft":
-                disconnect("microsoft")
+                disconnect("microsoft", query.get("id", [""])[0])
             elif path == "/apple":
                 delete_apple(query.get("id", [""])[0])
             else:

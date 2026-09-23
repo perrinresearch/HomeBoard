@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { Chore, ChoreConfig } from '../types';
 import { ChoreService } from '../services/choreService';
-import { FiPlus, FiSettings, FiCheck, FiRotateCcw, FiTrash2, FiUser } from 'react-icons/fi';
+import { FiPlus, FiCheck, FiRotateCcw, FiTrash2, FiUser } from 'react-icons/fi';
 import ConfirmDialog from './ConfirmDialog';
 import { format } from 'date-fns';
 
@@ -16,17 +16,6 @@ const ChoreContainer = styled.div`
   flex-direction: column;
   height: 100%;
   gap: 16px;
-`;
-
-const ChoreHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const ChoreControls = styled.div`
-  display: flex;
-  gap: 8px;
 `;
 
 const ControlButton = styled.button`
@@ -394,14 +383,6 @@ const ChoreWidget: React.FC<ChoreWidgetProps> = ({ config, onConfigChange }) => 
 
   return (
     <ChoreContainer>
-      <ChoreHeader>
-        <ChoreControls style={{ marginLeft: 'auto' }}>
-          <ControlButton onClick={() => setShowSettings(true)} title="Family members">
-            <FiSettings size={20} />
-          </ControlButton>
-        </ChoreControls>
-      </ChoreHeader>
-
       <ChoreTabs>
         <Tab
           active={activeTab === 'all'}

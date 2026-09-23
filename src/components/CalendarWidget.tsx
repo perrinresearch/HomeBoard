@@ -5,7 +5,8 @@ import {
   AppleFeed,
   CalendarService,
   CalendarSources,
-  RemoteAccount
+  RemoteAccount,
+  calendarOwners
 } from '../services/calendarService';
 import { FiPlus, FiSettings, FiTrash2, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { format, isSameDay, isToday } from 'date-fns';
@@ -20,8 +21,8 @@ interface CalendarWidgetProps {
 }
 
 const emptySources = (): CalendarSources => ({
-  google: { connected: false, calendars: [] },
-  microsoft: { connected: false, calendars: [] },
+  google: [],
+  microsoft: [],
   apple: []
 });
 
@@ -377,8 +378,8 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ config, onConfigChange,
     await loadRemote();
   };
 
-  const disconnect = async (provider: 'google' | 'microsoft') => {
-    setSources(await CalendarService.disconnect(provider));
+  const disconnect = async (provider: 'google' | 'microsoft', accountId: string) => {
+    setSources(await CalendarService.disconnect(provider, accountId));
     await loadRemote();
   };
 
@@ -390,7 +391,7 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ config, onConfigChange,
           {account.connected && account.email ? <EventMeta>{account.email}</EventMeta> : null}
         </div>
         {account.connected ? (
-          <Button className="quiet" onClick={() => disconnect(provider)}>Disconnect</Button>
+          <Button className="quiet" onClick={() => disconnect(provider, account.id)}>Disconnect</Button>
         ) : (
           <Button onClick={() => connect(provider)}>Connect</Button>
         )}
@@ -404,22 +405,19 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ config, onConfigChange,
           />
           <Swatch color={calendar.color || (provider === 'google' ? '#1a73e8' : '#0f6cbd')} />
           <span style={{ flex: 1 }}>{calendar.name}</span>
-          <select
-            value={calendar.familyMemberId || ''}
-            onChange={async (event) => {
+          <OwnerToggles
+            owners={calendarOwners(calendar)}
+            members={members}
+            onChange={async (familyMemberIds) => {
               setFormError('');
               try {
-                setSources(await CalendarService.setOwner(provider, calendar.id, event.target.value));
+                setSources(await CalendarService.setOwners(provider, calendar.id, familyMemberIds, account.id));
                 await loadRemote();
               } catch (error) {
                 setFormError(error instanceof Error ? error.message : 'Could not assign that calendar');
               }
             }}
-          >
-            <option value="">Unassigned</option>
-            <option value="household">Household</option>
-            {members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
-          </select>
+          />
         </Check>
       ))}
     </ProviderBlock>
@@ -484,8 +482,10 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ config, onConfigChange,
           <Sheet>
             <SheetTitle>Calendars</SheetTitle>
             {formError ? <ErrorText>{formError}</ErrorText> : null}
-            {renderAccount('google', 'Google', sources.google)}
-            {renderAccount('microsoft', 'Outlook', sources.microsoft)}
+            {sources.google.map(account => renderAccount('google', account.email || 'Gmail', account))}
+            {sources.google.length === 0 ? renderAccount('google', 'Google', { id: '', connected: false, calendars: [] }) : null}
+            {sources.microsoft.map(account => renderAccount('microsoft', account.email || 'Outlook', account))}
+            {sources.microsoft.length === 0 ? renderAccount('microsoft', 'Outlook', { id: '', connected: false, calendars: [] }) : null}
             <ProviderBlock>
               <strong>Apple</strong>
               <EventMeta>Paste the iCloud share link (webcal or https).</EventMeta>
@@ -493,22 +493,19 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ config, onConfigChange,
                 <Row key={feed.id}>
                   <Swatch color={feed.color || '#6b6258'} />
                   <span style={{ flex: 1 }}>{feed.name}</span>
-                  <select
-                    value={feed.familyMemberId || ''}
-                    onChange={async (event) => {
+                  <OwnerToggles
+                    owners={calendarOwners(feed)}
+                    members={members}
+                    onChange={async (familyMemberIds) => {
                       setFormError('');
                       try {
-                        setSources(await CalendarService.setOwner('apple', feed.id, event.target.value));
+                        setSources(await CalendarService.setOwners('apple', feed.id, familyMemberIds));
                         await loadRemote();
                       } catch (error) {
                         setFormError(error instanceof Error ? error.message : 'Could not assign that calendar');
                       }
                     }}
-                  >
-                    <option value="">Unassigned</option>
-                    <option value="household">Household</option>
-                    {members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}
-                  </select>
+                  />
                   <IconButton onClick={() => removeApple(feed)} aria-label={`Remove ${feed.name}`}>
                     <FiTrash2 size={18} />
                   </IconButton>
@@ -567,6 +564,30 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ config, onConfigChange,
         </Overlay>
       )}
     </Frame>
+  );
+};
+
+const OwnerToggles: React.FC<{
+  owners: string[];
+  members: FamilyMember[];
+  onChange: (ids: string[]) => void;
+}> = ({ owners, members, onChange }) => {
+  const toggle = (id: string) => {
+    onChange(owners.includes(id) ? owners.filter(owner => owner !== id) : [...owners, id]);
+  };
+  return (
+    <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      <label>
+        <input type="checkbox" checked={owners.includes('household')} onChange={() => toggle('household')} />
+        {' '}Household
+      </label>
+      {members.map(member => (
+        <label key={member.id}>
+          <input type="checkbox" checked={owners.includes(member.id)} onChange={() => toggle(member.id)} />
+          {' '}{member.name}
+        </label>
+      ))}
+    </span>
   );
 };
 

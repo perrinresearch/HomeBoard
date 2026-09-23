@@ -45,7 +45,7 @@ EOF
 chmod 600 ~/armbian/card.conf
 ```
 
-Build the dashboard and stage the image:
+Build the dashboard (with `.env.local` filled in; see [SETUP.md](../SETUP.md)) and stage the image:
 
 ```bash
 npm run build
@@ -68,7 +68,8 @@ ssh scott@homeboard.local 'sudo cat /var/log/homeboard-firstboot.log'
 ```
 
 The first-boot service stays enabled until it succeeds, so a wifi typo means
-"fix `/etc/netplan/30-wifis-dhcp.yaml` and reboot", not "reflash".
+fix it from Settings on the board (or edit `/etc/netplan/30-wifis-dhcp.yaml`
+and reboot), not "reflash".
 
 ### What staging injects
 
@@ -120,8 +121,23 @@ The launcher loop brings Chromium back within a few seconds.
 Google and Outlook sign-in, and Apple share links, are handled by a small
 service on the Pi (`homeboard-calendar`). The browser never sees the client
 secrets or refresh tokens. `./deploy/push-build.sh` installs that service and
-proxies `http://127.0.0.1/api/` to it. Settings on the board can change the
-Pi's timezone; saving restarts the kiosk browser so the clock picks it up.
+proxies `http://127.0.0.1/api/` to it. Several accounts of each kind can be
+connected. How to create the Firebase project, the OAuth clients, and the
+weather key is in [SETUP.md](../SETUP.md).
+
+The build copied to the Pi must already contain the Firebase and weather keys.
+`./deploy/push-build.sh` runs `npm run build` on the computer where
+`.env.local` lives.
+
+Settings on the board:
+
+- **Board** — Wi-Fi, household sign-in, timezone. The header Wi-Fi chip opens
+  this. Saving a timezone restarts the kiosk browser. The dashboard stays up
+  while Wi-Fi reconnects because the kiosk loads from `http://127.0.0.1/`.
+- **Family** — people used by chores, sports, and calendars
+- **Calendars** — connect Gmail, Microsoft, and iCloud links for a person
+- **Appearance** — theme
+- **Sports** — sports for those people
 
 Create the two cloud apps once, then put the ids and secrets in
 `/etc/homeboard/calendar.env` on the Pi (mode 600). A template is
@@ -131,8 +147,8 @@ it: `sudo systemctl restart homeboard-calendar`.
 Google Cloud:
 
 - Enable the Google Calendar API.
-- OAuth consent screen: External, and add your Gmail as a test user while the
-  app is in testing.
+- OAuth consent screen: External, and add every Gmail address as a test user
+  while the app is in testing.
 - Create a Web client. Authorized redirect URI:
   `http://127.0.0.1/api/google/callback`
 
@@ -142,18 +158,26 @@ Microsoft Entra (Azure):
 - Redirect URI (Web): `http://127.0.0.1/api/microsoft/callback`
 - Delegated permission `Calendars.Read`, and a client secret.
 
-On the panel, open the calendar widget settings and choose Connect. Sign-in is
-a full-page redirect, once per account. While that Google or Microsoft page is open, a keyboard is drawn on the page
-itself and a Cancel sign-in button stays at the top-left. Cancel returns to
-the dashboard. A separate window cannot sit above the fullscreen browser. Apple is not a sign-in: in iCloud
-Calendar, share the calendar and paste the `webcal://` or `https://` link.
+Apple is not a sign-in. In iCloud Calendar, share the calendar and paste the
+`webcal://` or `https://` link. While a Google or Microsoft page is open, a
+keyboard is drawn on the page and **Cancel sign-in** returns to the dashboard.
+
+Optional: a Firebase service account at
+`/etc/homeboard/firebase-service-account.json` lets this service upload events
+when the screen is asleep. Steps are in [SETUP.md](../SETUP.md).
 
 ## Where state lives
 
-Dashboard state (widgets, chores, sports, theme) is browser `localStorage` in
-`/home/homeboard/.homeboard-chrome`. It survives reboots and redeploys. It does
-not survive reflashing the card, so back that directory up if the board has a
-lot of hand-entered data.
+With a household signed in, family, chores, shopping, sports, and events added
+on the board are in Firestore. A copy remains in browser `localStorage` in
+`/home/homeboard/.homeboard-chrome` so a network blip does not blank the
+screen. Appearance stays in that profile. Google, Microsoft, and Apple tokens
+stay in `/var/lib/homeboard/calendar.json` on that Pi.
+
+Reflashing the card drops the Chrome profile and the tokens. The Firestore
+household remains. Back up `/home/homeboard/.homeboard-chrome` and
+`/var/lib/homeboard` if you care about the local copy and the calendar
+sign-ins.
 
 ## Troubleshooting
 
@@ -161,6 +185,7 @@ Check the pieces independently:
 
 ```bash
 curl -I http://127.0.0.1/            # nginx serving the build
+curl http://127.0.0.1/api/wifi       # Wi-Fi status from Settings
 systemctl status nginx lightdm       # web server and display manager
 pgrep -au homeboard chromium         # browser running as the kiosk user
 ```

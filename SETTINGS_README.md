@@ -1,4 +1,6 @@
-# HomeBoard Settings & Theme Customization
+# HomeBoard Settings
+
+This note is out of date. Appearance, family, calendars, sports, Wi-Fi, and timezone are configured from **Settings** on the board. Setup is in [SETUP.md](SETUP.md).
 
 ## Overview
 HomeBoard now includes a comprehensive settings system that allows users to fully customize the appearance of their dashboard. Users can modify backgrounds, headers, and widget headers with support for solid colors, gradients, and background images.

@@ -10,6 +10,7 @@ if [ ! -f /etc/homeboard/calendar.env ]; then
   chmod 600 /etc/homeboard/calendar.env
 fi
 install -m 755 /tmp/homeboard-broker/homeboard-calendar.py /usr/local/lib/homeboard/homeboard-calendar.py
+install -m 644 /tmp/homeboard-broker/firestore_push.py /usr/local/lib/homeboard/firestore_push.py
 install -o root -g root -m 755 /tmp/homeboard-broker/set-timezone /usr/local/lib/homeboard/set-timezone
 install -o root -g root -m 440 /tmp/homeboard-broker/homeboard-timezone.sudoers /etc/sudoers.d/homeboard-timezone
 if ! visudo -cf /etc/sudoers.d/homeboard-timezone; then
@@ -17,10 +18,22 @@ if ! visudo -cf /etc/sudoers.d/homeboard-timezone; then
   echo "timezone sudoers file was rejected" >&2
   exit 1
 fi
+install -o root -g root -m 755 /tmp/homeboard-broker/wifi-helper /usr/local/lib/homeboard/wifi-helper
+install -o root -g root -m 440 /tmp/homeboard-broker/homeboard-wifi.sudoers /etc/sudoers.d/homeboard-wifi
+if ! visudo -cf /etc/sudoers.d/homeboard-wifi; then
+  rm -f /etc/sudoers.d/homeboard-wifi
+  echo "wifi sudoers file was rejected" >&2
+  exit 1
+fi
 install -m 644 /tmp/homeboard-broker/homeboard-calendar.service /etc/systemd/system/homeboard-calendar.service
 install -m 644 /tmp/homeboard-broker/nginx-homeboard.conf /etc/nginx/sites-available/homeboard
 chown -R www-data:www-data /var/lib/homeboard
-DEBIAN_FRONTEND=noninteractive apt-get install -y python3-icalendar python3-tk matchbox-keyboard
+# Restart the broker before optional package installs so Settings is not left
+# talking to an old process if apt-get later fails.
+systemctl daemon-reload
+systemctl enable homeboard-calendar
+systemctl restart homeboard-calendar
+DEBIAN_FRONTEND=noninteractive apt-get install -y python3-icalendar python3-cryptography python3-tk matchbox-keyboard iw || true
 install -m 755 /tmp/homeboard-broker/homeboard-oauth-assist.py /usr/local/bin/homeboard-oauth-assist.py
 mkdir -p /usr/local/share/homeboard/oauth-keyboard
 cp -a /tmp/homeboard-broker/oauth-keyboard/. /usr/local/share/homeboard/oauth-keyboard/

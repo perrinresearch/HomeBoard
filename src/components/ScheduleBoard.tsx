@@ -4,6 +4,7 @@ import { addDays, format, isSameDay, isToday, startOfWeek } from 'date-fns';
 import { CalendarEvent, Chore, DailyForecast, FamilyMember, ShoppingItem } from '../types';
 import { WeatherIcon, describeDay } from './weatherIcons';
 import { ChoreService } from '../services/choreService';
+import { calendarOwners } from '../services/calendarService';
 import { FiCheck, FiChevronLeft, FiChevronRight, FiHome, FiPlus, FiX } from 'react-icons/fi';
 
 type View = 'month' | 'week' | 'day';
@@ -260,6 +261,7 @@ const Chip = styled.div<{ color: string }>`
   display: flex;
   align-items: center;
   gap: 5px;
+  cursor: pointer;
 `;
 
 const More = styled.div`
@@ -409,14 +411,20 @@ const MemberHeading = styled.h3`
   gap: 8px;
 `;
 
-const Agenda = styled.div`
+const Agenda = styled.button`
   display: flex;
   gap: 12px;
+  width: 100%;
   padding: 10px 12px;
   background: var(--hb-card);
+  border: none;
   border-radius: 12px;
   margin-top: 6px;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
 `;
 
 const AgendaTime = styled.div`
@@ -435,6 +443,78 @@ const AgendaMeta = styled.div`
   font-size: 13px;
   color: var(--hb-muted);
   margin-top: 2px;
+`;
+
+const DetailScrim = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(31, 35, 40, 0.28);
+  backdrop-filter: blur(6px);
+  z-index: 1700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+`;
+
+const DetailSheet = styled.div`
+  width: min(560px, 100%);
+  max-height: 80vh;
+  overflow: auto;
+  background: var(--hb-card);
+  color: var(--hb-text);
+  border-radius: 24px;
+  box-shadow: 0 24px 64px rgba(16, 24, 40, 0.16);
+  padding: 22px 24px 24px;
+`;
+
+const DetailHead = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+`;
+
+const DetailTitle = styled.h2`
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+`;
+
+const DetailClose = styled.button`
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 12px;
+  background: var(--hb-paper);
+  color: var(--hb-text);
+  cursor: pointer;
+  flex: 0 0 auto;
+`;
+
+const DetailWhen = styled.p`
+  margin: 8px 0 18px;
+  color: var(--hb-muted);
+  font-size: 16px;
+`;
+
+const DetailRow = styled.div`
+  margin-top: 14px;
+`;
+
+const DetailLabel = styled.div`
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hb-muted);
+`;
+
+const DetailBody = styled.p`
+  margin: 4px 0 0;
+  font-size: 16px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 `;
 
 const Empty = styled.div`
@@ -623,18 +703,15 @@ const Badge = styled.span<{ color: string; size: number }>`
   box-shadow: 0 0 0 1.5px var(--hb-card);
 `;
 
-const OwnerBadge: React.FC<{ event: CalendarEvent; members: FamilyMember[]; size?: number }> = ({ event, members, size = 16 }) => {
-  if (!event.familyMemberId) {
-    return null;
-  }
-  if (event.familyMemberId === HOUSEHOLD) {
+const OwnerBadge: React.FC<{ ownerId: string; members: FamilyMember[]; size?: number }> = ({ ownerId, members, size = 16 }) => {
+  if (ownerId === HOUSEHOLD) {
     return (
       <Badge color={HOUSEHOLD_COLOR} size={size} title="Household">
         <FiHome size={Math.round(size * 0.6)} />
       </Badge>
     );
   }
-  const member = members.find(item => item.id === event.familyMemberId);
+  const member = members.find(item => item.id === ownerId);
   if (!member) {
     return null;
   }
@@ -642,6 +719,18 @@ const OwnerBadge: React.FC<{ event: CalendarEvent; members: FamilyMember[]; size
     <Badge color={member.color} size={size} title={member.name}>
       {initialsFor(member, members)}
     </Badge>
+  );
+};
+
+const OwnerMarks: React.FC<{ event: CalendarEvent; members: FamilyMember[]; size?: number }> = ({ event, members, size = 16 }) => {
+  const owners = calendarOwners(event);
+  if (!owners.length) {
+    return null;
+  }
+  return (
+    <span style={{ display: 'inline-flex', gap: 2 }}>
+      {owners.map(ownerId => <OwnerBadge key={ownerId} ownerId={ownerId} members={members} size={size} />)}
+    </span>
   );
 };
 
@@ -660,10 +749,8 @@ function visible(event: CalendarEvent, memberId: string): boolean {
   if (!memberId) {
     return true;
   }
-  if (event.familyMemberId === HOUSEHOLD) {
-    return true;
-  }
-  return event.familyMemberId === memberId;
+  const owners = calendarOwners(event);
+  return owners.includes(HOUSEHOLD) || owners.includes(memberId);
 }
 
 function monthCells(cursor: Date): Date[] {
@@ -671,6 +758,31 @@ function monthCells(cursor: Date): Date[] {
   const start = new Date(first);
   start.setDate(1 - first.getDay());
   return Array.from({ length: 42 }, (_, index) => addDays(start, index));
+}
+
+function plainText(value?: string): string {
+  if (!value) {
+    return '';
+  }
+  return value
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .trim();
+}
+
+function whenLabel(event: CalendarEvent): string {
+  if (event.allDay) {
+    return `${format(event.start, 'EEEE, MMMM d')} · All day`;
+  }
+  if (isSameDay(event.start, event.end)) {
+    return `${format(event.start, 'EEEE, MMMM d')} · ${format(event.start, 'h:mm a')} – ${format(event.end, 'h:mm a')}`;
+  }
+  return `${format(event.start, 'MMM d, h:mm a')} – ${format(event.end, 'MMM d, h:mm a')}`;
 }
 
 function minutes(date: Date): number {
@@ -713,6 +825,12 @@ const ScheduleBoard: React.FC<ScheduleBoardProps> = ({
   const [choreTitle, setChoreTitle] = useState('');
   const [shopTitle, setShopTitle] = useState('');
   const [eventTitle, setEventTitle] = useState('');
+  const [detail, setDetail] = useState<CalendarEvent | null>(null);
+
+  const openDetail = (event: CalendarEvent, click?: React.MouseEvent) => {
+    click?.stopPropagation();
+    setDetail(event);
+  };
 
   const shown = useMemo(
     () => events.filter(event => visible(event, memberId)),
@@ -784,7 +902,7 @@ const ScheduleBoard: React.FC<ScheduleBoardProps> = ({
   };
 
   const renderAgenda = (list: CalendarEvent[]) => list.sort(byStart).map(event => (
-    <Agenda key={event.id} style={{ borderLeft: `3px solid ${eventColor(event, members)}` }}>
+    <Agenda type="button" key={event.id} style={{ borderLeft: `3px solid ${eventColor(event, members)}` }} onClick={() => openDetail(event)}>
       <AgendaTime>{event.allDay ? 'All day' : format(event.start, 'h:mm a')}</AgendaTime>
       <div style={{ flex: 1, minWidth: 0 }}>
         <AgendaTitle>{event.title}</AgendaTitle>
@@ -792,12 +910,12 @@ const ScheduleBoard: React.FC<ScheduleBoardProps> = ({
           <AgendaMeta>{[event.location, event.calendarName].filter(Boolean).join(' · ')}</AgendaMeta>
         )}
       </div>
-      <OwnerBadge event={event} members={members} size={22} />
+      <OwnerMarks event={event} members={members} size={22} />
     </Agenda>
   ));
 
   const dayEvents = shown.filter(event => isSameDay(event.start, cursor));
-  const unassigned = dayEvents.filter(event => !event.familyMemberId);
+  const unassigned = dayEvents.filter(event => calendarOwners(event).length === 0);
 
   return (
     <Board>
@@ -852,11 +970,11 @@ const ScheduleBoard: React.FC<ScheduleBoardProps> = ({
                         {forecastFor(day) && <WeatherIcon code={forecastFor(day)!.icon} size={22} />}
                       </CellHead>
                       {list.slice(0, 3).map(event => (
-                        <Chip key={event.id} color={eventColor(event, members)}>
+                        <Chip key={event.id} color={eventColor(event, members)} onClick={(click) => openDetail(event, click)}>
                           <Dot color={eventColor(event, members)} />
                           {!event.allDay && <span style={{ color: 'var(--hb-muted)' }}>{format(event.start, 'h:mm')}</span>}
                           <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{event.title}</span>
-                          <OwnerBadge event={event} members={members} size={14} />
+                          <OwnerMarks event={event} members={members} size={14} />
                         </Chip>
                       ))}
                       {list.length > 3 && <More>+{list.length - 3} more</More>}
@@ -888,9 +1006,9 @@ const ScheduleBoard: React.FC<ScheduleBoardProps> = ({
                 {weekDays.map(day => (
                   <AllDayCell key={`all-${day.toISOString()}`}>
                     {shown.filter(event => event.allDay && isSameDay(event.start, day)).map(event => (
-                      <Chip key={event.id} color={eventColor(event, members)}>
+                      <Chip key={event.id} color={eventColor(event, members)} onClick={(click) => openDetail(event, click)}>
                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{event.title}</span>
-                        <OwnerBadge event={event} members={members} size={14} />
+                        <OwnerMarks event={event} members={members} size={14} />
                       </Chip>
                     ))}
                   </AllDayCell>
@@ -918,9 +1036,9 @@ const ScheduleBoard: React.FC<ScheduleBoardProps> = ({
                             height={((end - start) / span) * 100}
                             lane={lane}
                             lanes={lanes}
-                            onClick={() => openDay(day)}
+                            onClick={() => openDetail(event)}
                           >
-                            <BlockBadge><OwnerBadge event={event} members={members} size={16} /></BlockBadge>
+                            <BlockBadge><OwnerMarks event={event} members={members} size={16} /></BlockBadge>
                             <BlockTime>{format(event.start, 'h:mm a')}</BlockTime>
                             {event.title}
                           </Block>
@@ -936,7 +1054,10 @@ const ScheduleBoard: React.FC<ScheduleBoardProps> = ({
           {view === 'day' && (
             <DayGroups>
               {(memberId ? members.filter(member => member.id === memberId) : members).map(member => {
-                const mine = dayEvents.filter(event => event.familyMemberId === member.id || event.familyMemberId === HOUSEHOLD);
+                const mine = dayEvents.filter(event => {
+                  const owners = calendarOwners(event);
+                  return owners.includes(member.id) || owners.includes(HOUSEHOLD);
+                });
                 return (
                   <MemberCard key={member.id} color={member.color}>
                     <MemberHeading><Dot color={member.color} />{member.name}</MemberHeading>
@@ -1027,6 +1148,47 @@ const ScheduleBoard: React.FC<ScheduleBoardProps> = ({
           </AddRow>
         </Panel>
       </Rail>
+      {detail && (
+        <DetailScrim onClick={() => setDetail(null)}>
+          <DetailSheet onClick={(click) => click.stopPropagation()}>
+            <DetailHead>
+              <DetailTitle>{detail.title}</DetailTitle>
+              <DetailClose type="button" aria-label="Close event" onClick={() => setDetail(null)}>
+                <FiX size={20} />
+              </DetailClose>
+            </DetailHead>
+            <DetailWhen>{whenLabel(detail)}</DetailWhen>
+            {calendarOwners(detail).length > 0 && (
+              <DetailRow>
+                <DetailLabel>Who</DetailLabel>
+                <DetailBody>
+                  {calendarOwners(detail).map(ownerId => (
+                    ownerId === HOUSEHOLD ? 'Household' : members.find(member => member.id === ownerId)?.name
+                  )).filter(Boolean).join(', ')}
+                </DetailBody>
+              </DetailRow>
+            )}
+            {detail.calendarName && (
+              <DetailRow>
+                <DetailLabel>Calendar</DetailLabel>
+                <DetailBody>{detail.calendarName}</DetailBody>
+              </DetailRow>
+            )}
+            {detail.location && (
+              <DetailRow>
+                <DetailLabel>Location</DetailLabel>
+                <DetailBody>{detail.location}</DetailBody>
+              </DetailRow>
+            )}
+            {plainText(detail.description) && (
+              <DetailRow>
+                <DetailLabel>Details</DetailLabel>
+                <DetailBody>{plainText(detail.description)}</DetailBody>
+              </DetailRow>
+            )}
+          </DetailSheet>
+        </DetailScrim>
+      )}
     </Board>
   );
 };

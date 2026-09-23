@@ -1,14 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
-import { AppSettings, ThemeConfig } from '../types';
+import { AppSettings, AppState, ThemeConfig } from '../types';
 import { SettingsService } from '../services/settingsService';
 import { CalendarService } from '../services/calendarService';
+import HouseholdSettings from './HouseholdSettings';
+import WifiPanel from './WifiPanel';
+import { WifiStatus } from '../services/calendarService';
 import { FiX, FiImage } from 'react-icons/fi';
 import { MdPalette, MdGradient } from 'react-icons/md';
 
 interface SettingsProps {
   settings: AppSettings;
+  appState: AppState;
+  panel: 'appearance' | 'board';
+  embedded?: boolean;
   onSettingsChange: (settings: AppSettings) => void;
+  onWifiChange?: (status: WifiStatus) => void;
   onClose: () => void;
 }
 
@@ -310,7 +317,7 @@ function zoneClock(zone: string) {
   }
 }
 
-const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose }) => {
+const Settings: React.FC<SettingsProps> = ({ settings, appState, panel, embedded = false, onSettingsChange, onWifiChange, onClose }) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [timezone, setTimezone] = useState('');
   const [savedTimezone, setSavedTimezone] = useState('');
@@ -489,7 +496,9 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
 
   const handleCancel = () => {
     setLocalSettings(settings);
-    onClose();
+    if (!embedded) {
+      onClose();
+    }
   };
 
   const zoneOptions = useMemo(() => {
@@ -509,20 +518,13 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
   const currentHeaderCSS = SettingsService.generateCSSHeader(localSettings.theme.header);
   const currentWidgetHeaderCSS = SettingsService.generateCSSWidgetHeader(localSettings.theme.widgetHeader);
 
-  return (
-    <Modal onClick={onClose}>
-      <ModalContent onClick={e => e.stopPropagation()}>
-        <ModalHeader>
-          <ModalTitle>
-            <MdPalette />
-            Settings
-          </ModalTitle>
-          <CloseButton onClick={onClose}>
-            <FiX size={20} />
-          </CloseButton>
-        </ModalHeader>
+  const body = (
+    <>
+        {panel === 'board' && <WifiPanel onStatusChange={onWifiChange} />}
 
-        <Section>
+        {panel === 'board' && <HouseholdSettings appState={appState} />}
+
+        {panel === 'board' && <Section>
           <SectionTitle>Timezone</SectionTitle>
           <FormGroup>
             <Label htmlFor="timezone-search">Find a timezone</Label>
@@ -554,9 +556,9 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
             {clock ? <Hint>{clock} in this timezone. Saving reloads the board.</Hint> : null}
             {timezoneError ? <FieldError>{timezoneError}</FieldError> : null}
           </FormGroup>
-        </Section>
+        </Section>}
 
-        <Section>
+        {panel === 'appearance' && <Section>
           <SectionTitle>Preset Themes</SectionTitle>
           <PresetGrid>
             {presetThemes.map((preset) => (
@@ -569,9 +571,9 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
               </PresetButton>
             ))}
           </PresetGrid>
-        </Section>
+        </Section>}
 
-        <Section>
+        {panel === 'appearance' && <Section>
           <SectionTitle>
             <FiImage />
             Background
@@ -677,9 +679,9 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
           <PreviewBox background={currentBackgroundCSS}>
             Background Preview
           </PreviewBox>
-        </Section>
+        </Section>}
 
-        <Section>
+        {panel === 'appearance' && <Section>
           <SectionTitle>
             <MdGradient />
             Header
@@ -745,9 +747,9 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
           <PreviewBox background={currentHeaderCSS}>
             Header Preview
           </PreviewBox>
-        </Section>
+        </Section>}
 
-        <Section>
+        {panel === 'appearance' && <Section>
           <SectionTitle>
             <MdGradient />
             Widget Headers
@@ -813,7 +815,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
           <PreviewBox background={currentWidgetHeaderCSS}>
             Widget Header Preview
           </PreviewBox>
-        </Section>
+        </Section>}
 
         <ButtonGroup>
           <Button className="secondary" onClick={handleCancel}>
@@ -823,6 +825,26 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
             {saving ? 'Saving…' : 'Save Changes'}
           </Button>
         </ButtonGroup>
+    </>
+  );
+
+  if (embedded) {
+    return body;
+  }
+
+  return (
+    <Modal onClick={onClose}>
+      <ModalContent onClick={event => event.stopPropagation()}>
+        <ModalHeader>
+          <ModalTitle>
+            <MdPalette />
+            {panel === 'board' ? 'Board' : 'Appearance'}
+          </ModalTitle>
+          <CloseButton onClick={onClose}>
+            <FiX size={20} />
+          </CloseButton>
+        </ModalHeader>
+        {body}
       </ModalContent>
     </Modal>
   );

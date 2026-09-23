@@ -1,0 +1,7 @@
+# Copy to android/firebase.properties. Use the same Firebase project as the kiosk build.
+# Register the Android app id com.perrinresearch.homeboard in that project.
+FIREBASE_API_KEY=
+FIREBASE_APP_ID=
+FIREBASE_PROJECT_ID=
+# Page the tablet opens. Use the Pi on the home network, or a hosted build of this repo.
+BOARD_URL=http://homeboard.local

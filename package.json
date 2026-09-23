@@ -12,6 +12,7 @@
     "@types/uuid": "^9.0.0",
     "axios": "^1.6.0",
     "date-fns": "^2.30.0",
+    "firebase": "^10.14.1",
     "react": "^18.2.0",
     "react-beautiful-dnd": "^13.1.1",
     "react-calendar": "^4.6.0",

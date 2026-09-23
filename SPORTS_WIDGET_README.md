@@ -1,5 +1,7 @@
 # Sports Widget for HomeBoard
 
+People are added under **Settings → Family**, not inside this widget. Setup for the rest of the system is in [SETUP.md](SETUP.md).
+
 ## Overview
 The Sports Widget is a comprehensive tool for tracking sports activities, schedules, and equipment for family members. It integrates seamlessly with the existing HomeBoard calendar system to display all sports events.
 

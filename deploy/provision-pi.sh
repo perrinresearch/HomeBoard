@@ -47,8 +47,10 @@ DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y --no-install-recommends 
   curl \
   rsync \
   python3-icalendar \
+  python3-cryptography \
   python3-tk \
-  matchbox-keyboard
+  matchbox-keyboard \
+  iw
 
 # Ubuntu ships chromium as a snap shim, which behaves badly in a kiosk.
 CHROMIUM_BIN=""
@@ -130,6 +132,9 @@ if [ ! -f /etc/homeboard/calendar.env ]; then
 fi
 if [ -f "$HERE/calendar-broker/homeboard-calendar.py" ]; then
   $SUDO cp "$HERE/calendar-broker/homeboard-calendar.py" /usr/local/lib/homeboard/homeboard-calendar.py
+  if [ -f "$HERE/calendar-broker/firestore_push.py" ]; then
+    $SUDO cp "$HERE/calendar-broker/firestore_push.py" /usr/local/lib/homeboard/firestore_push.py
+  fi
   $SUDO cp "$HERE/calendar-broker/homeboard-calendar.service" /etc/systemd/system/homeboard-calendar.service
   $SUDO chmod 755 /usr/local/lib/homeboard/homeboard-calendar.py
   if [ -f "$HERE/calendar-broker/set-timezone" ]; then
@@ -138,6 +143,15 @@ if [ -f "$HERE/calendar-broker/homeboard-calendar.py" ]; then
     if ! $SUDO visudo -cf /etc/sudoers.d/homeboard-timezone; then
       $SUDO rm -f /etc/sudoers.d/homeboard-timezone
       echo "timezone sudoers file was rejected" >&2
+      exit 1
+    fi
+  fi
+  if [ -f "$HERE/calendar-broker/wifi-helper" ]; then
+    $SUDO install -o root -g root -m 755 "$HERE/calendar-broker/wifi-helper" /usr/local/lib/homeboard/wifi-helper
+    $SUDO install -o root -g root -m 440 "$HERE/calendar-broker/homeboard-wifi.sudoers" /etc/sudoers.d/homeboard-wifi
+    if ! $SUDO visudo -cf /etc/sudoers.d/homeboard-wifi; then
+      $SUDO rm -f /etc/sudoers.d/homeboard-wifi
+      echo "wifi sudoers file was rejected" >&2
       exit 1
     fi
   fi

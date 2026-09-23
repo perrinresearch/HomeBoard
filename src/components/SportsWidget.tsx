@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import styled from 'styled-components';
 import { SportsConfig, Sport, FamilyMember } from '../types';
 import { SportsService } from '../services/sportsService';
-import { FiUsers, FiCalendar, FiActivity, FiPlus, FiEdit2, FiTrash2, FiChevronDown, FiChevronRight } from 'react-icons/fi';
+import { FiCalendar, FiActivity, FiPlus, FiEdit2, FiTrash2, FiChevronDown, FiChevronRight } from 'react-icons/fi';
 import ConfirmDialog from './ConfirmDialog';
 
 interface SportsWidgetProps {
@@ -678,60 +678,6 @@ const SportsWidget: React.FC<SportsWidgetProps> = ({ config, onConfigChange }) =
     </Content>
   );
 
-  const renderMembersTab = () => (
-    <Content>
-      <Section>
-        <SectionTitle>
-          <FiUsers />
-          Family Members
-          <Button onClick={() => setShowAddMemberModal(true)}>
-            <FiPlus />
-            Add Member
-          </Button>
-        </SectionTitle>
-        
-        {config.members.length === 0 ? (
-          <EmptyState>
-            <EmptyStateText>No family members added yet. Add your first family member to get started!</EmptyStateText>
-          </EmptyState>
-        ) : (
-          config.members.map(member => {
-            const stats = SportsService.getMemberStats(config, member.id);
-            
-            return (
-              <MemberCard key={member.id}>
-                <MemberInfo>
-                  <MemberColor color={member.color} />
-                  <div>
-                    <div style={{ fontWeight: '600' }}>{member.name}</div>
-                    <MemberStats>
-                      {stats.sportsCount} sports • {stats.upcomingEventsCount} upcoming events
-                    </MemberStats>
-                  </div>
-                </MemberInfo>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <Button 
-                     
-                    className="secondary"
-                    onClick={() => openEditMemberModal(member)}
-                  >
-                    <FiEdit2 />
-                  </Button>
-                  <Button 
-                     
-                    className="danger"
-                    onClick={() => handleDeleteMember(member.id)}
-                  >
-                    <FiTrash2 />
-                  </Button>
-                </div>
-              </MemberCard>
-            );
-          })
-        )}
-      </Section>
-    </Content>
-  );
 
   return (
     <WidgetContainer>
@@ -750,18 +696,10 @@ const SportsWidget: React.FC<SportsWidgetProps> = ({ config, onConfigChange }) =
           <FiCalendar />
           Schedule
         </Tab>
-        <Tab 
-          active={activeTab === 'members'} 
-          onClick={() => setActiveTab('members')}
-        >
-          <FiUsers />
-          Members
-        </Tab>
       </TabContainer>
       
       {activeTab === 'sports' && renderSportsTab()}
       {activeTab === 'schedule' && renderScheduleTab()}
-      {activeTab === 'members' && renderMembersTab()}
       
       {/* Add Member Modal */}
       {showAddMemberModal && (

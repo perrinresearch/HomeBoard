@@ -1,21 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { WeatherLocation, CalendarConfig, ChoreConfig, SportsConfig, AppState, CalendarEvent, FamilyMember, AppSettings, WeatherData, DailyForecast } from './types';
 import { WeatherService } from './services/weatherService';
 import { ChoreService } from './services/choreService';
 import { SportsService } from './services/sportsService';
-import { CalendarService } from './services/calendarService';
+import { CalendarService, WifiStatus, calendarOwners } from './services/calendarService';
 import { SettingsService } from './services/settingsService';
 import { loadAppState, saveAppState } from './services/storageService';
-import CalendarWidget from './components/CalendarWidget';
+import { pushRemoteEvents, useHouseholdSync } from './services/householdService';
+import ConfigShell, { ConfigSection } from './components/ConfigShell';
 import ChoreWidget from './components/ChoreWidget';
-import SportsWidget from './components/SportsWidget';
-import Settings from './components/Settings';
 import OnScreenKeyboard from './components/OnScreenKeyboard';
 import ScheduleBoard from './components/ScheduleBoard';
 import WeatherNow from './components/WeatherNow';
 import WeatherWidget from './components/WeatherWidget';
-import { FiSettings } from 'react-icons/fi';
+import { FiSettings, FiWifi, FiWifiOff } from 'react-icons/fi';
 
 const AppContainer = styled.div<{ background: string; light: boolean }>`
   min-height: 100vh;
@@ -104,6 +103,32 @@ const HeaderButton = styled.button<{ chrome: string }>`
   }
 `;
 
+const WifiChip = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 4px 8px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  opacity: 0.72;
+  max-width: 180px;
+
+  &:active {
+    background: rgba(31, 35, 40, 0.05);
+  }
+`;
+
+const WifiName = styled.span`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
 const ModalScrim = styled.div`
   position: fixed;
   inset: 0;
@@ -163,18 +188,24 @@ const isLightBackground = (background: string) => {
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(() => loadAppState());
-  const [showSettings, setShowSettings] = useState(false);
+  const [configSection, setConfigSection] = useState<ConfigSection | null>(null);
   const [showChores, setShowChores] = useState(false);
-  const [showSports, setShowSports] = useState(false);
-  const [showCalendars, setShowCalendars] = useState(false);
   const [showWeather, setShowWeather] = useState(false);
+  const [wifi, setWifi] = useState<WifiStatus | null>(null);
   const [weatherNow, setWeatherNow] = useState<WeatherData | null>(null);
   const [forecast, setForecast] = useState<DailyForecast[]>([]);
-  const [remoteEvents, setRemoteEvents] = useState<CalendarEvent[]>([]);
+  const [apiEvents, setApiEvents] = useState<CalendarEvent[] | null>(null);
+  const [cloudEvents, setCloudEvents] = useState<CalendarEvent[]>([]);
+  const remoteEvents = apiEvents ?? cloudEvents;
+  const onCloudEvents = useCallback((events: CalendarEvent[]) => {
+    setCloudEvents(events);
+  }, []);
 
   useEffect(() => {
     saveAppState(appState);
   }, [appState]);
+
+  useHouseholdSync(appState, setAppState, onCloudEvents);
 
   useEffect(() => {
     const tick = () => {
@@ -192,6 +223,39 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get('connected');
+    if (connected !== 'google' && connected !== 'microsoft') {
+      return;
+    }
+    const owner = sessionStorage.getItem('homeboard.pendingCalendarOwner');
+    const accountId = params.get('account') || '';
+    sessionStorage.removeItem('homeboard.pendingCalendarOwner');
+    window.history.replaceState({}, '', window.location.pathname);
+    setConfigSection('calendars');
+    if (!owner) {
+      return;
+    }
+    void (async () => {
+      try {
+        const sources = await CalendarService.fetchSources();
+        const accounts = connected === 'google' ? sources.google : sources.microsoft;
+        const targets = accountId ? accounts.filter(account => account.id === accountId) : accounts;
+        for (const account of targets) {
+          for (const calendar of account.calendars) {
+            if (calendarOwners(calendar).length === 0) {
+              await CalendarService.setOwner(connected, calendar.id, owner, account.id, 'add');
+              await CalendarService.setCalendarEnabled(connected, calendar.id, true, account.id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Could not assign calendars after sign-in', error);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     const parseWhen = (value: string, allDay?: boolean) => {
       if (allDay || /^\d{4}-\d{2}-\d{2}$/.test(value)) {
         const [year, month, day] = value.slice(0, 10).split('-').map(Number);
@@ -206,19 +270,43 @@ const App: React.FC = () => {
         if (stop) {
           return;
         }
-        setRemoteEvents(body.events.map(event => ({
+        const events = body.events.map(event => ({
           ...event,
           start: parseWhen(event.start, event.allDay),
           end: parseWhen(event.end, event.allDay)
-        })));
+        }));
+        setApiEvents(events);
+        void pushRemoteEvents(events);
       } catch (error) {
         if (!stop) {
-          setRemoteEvents([]);
+          setApiEvents(null);
         }
       }
     };
     load();
     const id = window.setInterval(load, 15 * 60 * 1000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    let stop = false;
+    const load = async () => {
+      try {
+        const next = await CalendarService.fetchWifi();
+        if (!stop) {
+          setWifi(next);
+        }
+      } catch {
+        if (!stop) {
+          setWifi(null);
+        }
+      }
+    };
+    load();
+    const id = window.setInterval(load, 15000);
     return () => {
       stop = true;
       window.clearInterval(id);
@@ -362,15 +450,22 @@ const App: React.FC = () => {
               today={forecast.find(day => day.date === todayKey())}
               onOpen={() => setShowWeather(true)}
             />
+            {wifi ? (
+              <>
+                <Divider />
+                <WifiChip
+                  type="button"
+                  onClick={() => setConfigSection('board')}
+                  aria-label={wifi.connected && wifi.ssid ? `Wi-Fi ${wifi.ssid}` : 'Wi-Fi disconnected'}
+                >
+                  {wifi.connected ? <FiWifi size={18} /> : <FiWifiOff size={18} />}
+                  <WifiName>{wifi.connected && wifi.ssid ? wifi.ssid : 'No Wi-Fi'}</WifiName>
+                </WifiChip>
+              </>
+            ) : null}
           </HeaderLeft>
           <HeaderActions>
-            <HeaderButton chrome={headerChrome} onClick={() => setShowCalendars(true)}>
-              Calendars
-            </HeaderButton>
-            <HeaderButton chrome={headerChrome} onClick={() => setShowSports(true)}>
-              Sports
-            </HeaderButton>
-            <HeaderButton chrome={headerChrome} onClick={() => setShowSettings(true)}>
+            <HeaderButton chrome={headerChrome} onClick={() => setConfigSection('family')}>
               <FiSettings size={20} />
               Settings
             </HeaderButton>
@@ -427,17 +522,6 @@ const App: React.FC = () => {
             </Sheet>
           </ModalScrim>
         )}
-        {showSports && (
-          <ModalScrim>
-            <Sheet>
-              <SheetHeader>
-                Sports
-                <HeaderButton chrome="var(--hb-card)" onClick={() => setShowSports(false)}>Done</HeaderButton>
-              </SheetHeader>
-              <SportsWidget config={appState.sportsConfig} onConfigChange={handleSportsConfigChange} />
-            </Sheet>
-          </ModalScrim>
-        )}
         {showWeather && (
           <ModalScrim>
             <Sheet style={{ width: 'min(560px, 100%)' }}>
@@ -453,21 +537,16 @@ const App: React.FC = () => {
             </Sheet>
           </ModalScrim>
         )}
-        {showCalendars && (
-          <CalendarWidget
-            accountsOnly
-            members={appState.familyMembers}
-            config={appState.calendarConfig}
-            onConfigChange={handleCalendarConfigChange}
-            onClose={() => setShowCalendars(false)}
-          />
-        )}
-
-        {showSettings && (
-          <Settings
-            settings={appState.settings}
+        {configSection && (
+          <ConfigShell
+            section={configSection}
+            appState={appState}
+            onSection={setConfigSection}
+            onClose={() => setConfigSection(null)}
             onSettingsChange={handleSettingsChange}
-            onClose={() => setShowSettings(false)}
+            onChoresChange={handleChoreConfigChange}
+            onSportsChange={handleSportsConfigChange}
+            onWifiChange={setWifi}
           />
         )}
         <OnScreenKeyboard />

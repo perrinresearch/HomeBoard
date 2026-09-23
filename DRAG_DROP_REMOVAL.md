@@ -1,5 +1,7 @@
 # Drag and Drop Functionality Removal
 
+Historical note. Current setup is in [SETUP.md](SETUP.md).
+
 ## Overview
 The drag and drop functionality has been removed from the HomeBoard application to resolve conflicts and simplify the widget management system.
 

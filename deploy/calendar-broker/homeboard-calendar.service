@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 User=www-data
 Group=www-data
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 EnvironmentFile=-/etc/homeboard/calendar.env
 ExecStart=/usr/bin/python3 /usr/local/lib/homeboard/homeboard-calendar.py
 Restart=on-failure

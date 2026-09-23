@@ -1,0 +1,4 @@
+# Let the calendar broker scan and change Wi-Fi through the helper.
+Defaults:www-data !requiretty
+Defaults:www-data secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+www-data ALL=(root) NOPASSWD: /usr/local/lib/homeboard/wifi-helper
