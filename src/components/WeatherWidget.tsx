@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { WeatherData, WeatherLocation } from '../types';
 import { WeatherService } from '../services/weatherService';
-import { FiMapPin, FiPlus, FiTrash2, FiRefreshCw } from 'react-icons/fi';
+import { FiMapPin, FiPlus, FiTrash2 } from 'react-icons/fi';
 import { format } from 'date-fns';
 
 interface WeatherWidgetProps {
   locations: WeatherLocation[];
   onLocationsChange: (locations: WeatherLocation[]) => void;
+  homeMode?: boolean;
 }
 
 const WeatherContainer = styled.div`
@@ -19,16 +20,17 @@ const WeatherContainer = styled.div`
 
 const CurrentTime = styled.div`
   text-align: center;
-  font-size: 24px;
-  font-weight: bold;
-  color: #333;
+  font-size: 40px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--hb-text);
   margin-bottom: 8px;
 `;
 
 const CurrentDate = styled.div`
   text-align: center;
   font-size: 14px;
-  color: #666;
+  color: var(--hb-muted);
   margin-bottom: 16px;
 `;
 
@@ -41,11 +43,11 @@ const LocationList = styled.div`
 `;
 
 const LocationCard = styled.div<{ isCurrent: boolean }>`
-  background: ${props => props.isCurrent ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#f8f9fa'};
-  color: ${props => props.isCurrent ? 'white' : '#333'};
+  background: ${props => props.isCurrent ? 'var(--hb-accent-soft)' : 'var(--hb-paper)'};
+  color: var(--hb-text);
   padding: 12px;
-  border-radius: 8px;
-  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  border: 1px solid var(--hb-line);
   position: relative;
 `;
 
@@ -75,7 +77,7 @@ const ControlButton = styled.button`
   color: inherit;
   cursor: pointer;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -111,20 +113,23 @@ const WeatherDescription = styled.div`
 `;
 
 const AddLocationButton = styled.button`
-  background: #4CAF50;
+  background: var(--hb-accent);
   color: white;
   border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: 12px 16px;
+  min-height: 44px;
+  border-radius: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 15px;
+  font-weight: 600;
   transition: background-color 0.2s ease;
   
   &:hover {
-    background: #45a049;
+    background: var(--hb-success);
   }
 `;
 
@@ -137,7 +142,7 @@ const SearchInput = styled.input`
   width: 100%;
   padding: 8px 12px;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 12px;
 `;
 
@@ -148,7 +153,7 @@ const SearchResults = styled.div`
   right: 0;
   background: white;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: 12px;
   max-height: 150px;
   overflow-y: auto;
   z-index: 10;
@@ -184,13 +189,31 @@ const LoadingSpinner = styled.div`
   }
 `;
 
-const WeatherWidget: React.FC<WeatherWidgetProps> = ({ locations, onLocationsChange }) => {
+const HomeBadge = styled.span`
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hb-accent);
+  margin-left: 6px;
+`;
+
+const MakeHome = styled.button`
+  border: 1px solid var(--hb-line);
+  background: var(--hb-card);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 12px;
+  cursor: pointer;
+`;
+
+const WeatherWidget: React.FC<WeatherWidgetProps> = ({ locations, onLocationsChange, homeMode = false }) => {
   const [weatherData, setWeatherData] = useState<WeatherData[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<WeatherLocation[]>([]);
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
   const [showSearch, setShowSearch] = useState(false);
+  const [locationError, setLocationError] = useState('');
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -234,13 +257,22 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ locations, onLocationsCha
 
   const addLocation = (location: WeatherLocation) => {
     if (locations.length >= 6) {
-      alert('Maximum 6 locations allowed');
+      setLocationError('Maximum 6 locations allowed');
       return;
     }
-    onLocationsChange([...locations, location]);
+    setLocationError('');
+    const added = { ...location, id: `${location.id}-${Date.now()}` };
+    onLocationsChange(homeMode ? [added, ...locations] : [...locations, added]);
     setSearchQuery('');
     setSearchResults([]);
     setShowSearch(false);
+  };
+
+  const makeHome = (locationId: string) => {
+    const chosen = locations.find(loc => loc.id === locationId);
+    if (chosen) {
+      onLocationsChange([chosen, ...locations.filter(loc => loc.id !== locationId)]);
+    }
   };
 
   const removeLocation = (locationId: string) => {
@@ -253,8 +285,13 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ locations, onLocationsCha
 
   return (
     <WeatherContainer>
-      <CurrentTime>{format(currentTime, 'HH:mm:ss')}</CurrentTime>
-      <CurrentDate>{format(currentTime, 'EEEE, MMMM do, yyyy')}</CurrentDate>
+      {!homeMode && <CurrentTime>{format(currentTime, 'HH:mm:ss')}</CurrentTime>}
+      {!homeMode && <CurrentDate>{format(currentTime, 'EEEE, MMMM do, yyyy')}</CurrentDate>}
+      {homeMode && (
+        <div style={{ color: 'var(--hb-muted)', fontSize: 14 }}>
+          The first location is shown on the board. Search for your town to set it.
+        </div>
+      )}
       
       {showSearch && (
         <SearchContainer>
@@ -280,19 +317,23 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ locations, onLocationsCha
       )}
 
       <LocationList>
-        {locations.map((location) => {
+        {locations.map((location, index) => {
           const weather = getWeatherForLocation(location.id);
           const isLoading = loading[location.id];
           
           return (
-            <LocationCard key={location.id} isCurrent={location.isCurrentLocation}>
+            <LocationCard key={location.id} isCurrent={homeMode ? index === 0 : location.isCurrentLocation}>
               <LocationHeader>
                 <LocationName>
                   <FiMapPin size={12} />
                   {location.name}
                   {location.isCurrentLocation && ' (Current)'}
+                  {homeMode && index === 0 && <HomeBadge>Home</HomeBadge>}
                 </LocationName>
                 <LocationControls>
+                  {homeMode && index > 0 && (
+                    <MakeHome type="button" onClick={() => makeHome(location.id)}>Use for board</MakeHome>
+                  )}
                   {isLoading && <LoadingSpinner />}
                   <ControlButton onClick={() => removeLocation(location.id)}>
                     <FiTrash2 size={12} />
@@ -324,7 +365,7 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ locations, onLocationsCha
                   <LoadingSpinner />
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', color: '#666' }}>
+                <div style={{ textAlign: 'center', color: 'var(--hb-muted)' }}>
                   Weather data unavailable
                 </div>
               )}
@@ -333,9 +374,13 @@ const WeatherWidget: React.FC<WeatherWidgetProps> = ({ locations, onLocationsCha
         })}
       </LocationList>
 
+      {locationError && (
+        <div style={{ color: 'var(--hb-danger)', fontSize: '14px' }}>{locationError}</div>
+      )}
+
       {!showSearch && locations.length < 6 && (
         <AddLocationButton onClick={() => setShowSearch(true)}>
-          <FiPlus size={12} />
+          <FiPlus size={16} />
           Add Location
         </AddLocationButton>
       )}

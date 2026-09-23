@@ -1,0 +1,67 @@
+#hb-oauth-cancel,
+#hb-oauth-keys {
+  all: initial;
+  font-family: "Segoe UI", sans-serif;
+}
+
+#hb-oauth-cancel {
+  position: fixed !important;
+  top: 16px !important;
+  left: 16px !important;
+  z-index: 2147483647 !important;
+  min-height: 56px !important;
+  padding: 0 18px !important;
+  border: none !important;
+  border-radius: 14px !important;
+  background: #3d4fdb !important;
+  color: white !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+}
+
+#hb-oauth-keys {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 2147483646 !important;
+  display: none !important;
+  box-sizing: border-box !important;
+  padding: 8px 8px 12px !important;
+  background: #161b24 !important;
+}
+
+#hb-oauth-keys.hb-open {
+  display: block !important;
+}
+
+#hb-oauth-keys .hb-row {
+  display: flex !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  margin-top: 6px !important;
+}
+
+#hb-oauth-keys button {
+  flex: 1 1 0 !important;
+  max-width: 92px !important;
+  min-height: 52px !important;
+  border: none !important;
+  border-radius: 10px !important;
+  background: #f6f3ee !important;
+  color: #1c1917 !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+}
+
+#hb-oauth-keys button.hb-wide {
+  flex: 1.5 1 0 !important;
+  max-width: 140px !important;
+  background: #2c3544 !important;
+  color: #f6f3ee !important;
+}
+
+#hb-oauth-keys button.hb-space {
+  flex: 4 1 160px !important;
+  max-width: 420px !important;
+}

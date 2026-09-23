@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { SportsConfig, Sport, SportEvent, FamilyMember } from '../types';
+import { SportsConfig, Sport, FamilyMember } from '../types';
 import { SportsService } from '../services/sportsService';
 import { FiUsers, FiCalendar, FiActivity, FiPlus, FiEdit2, FiTrash2, FiChevronDown, FiChevronRight } from 'react-icons/fi';
+import ConfirmDialog from './ConfirmDialog';
 
 interface SportsWidgetProps {
   config: SportsConfig;
@@ -13,40 +14,23 @@ const WidgetContainer = styled.div`
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-`;
-
-const Header = styled.div`
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 16px 20px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-`;
-
-const HeaderTitle = styled.h3`
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
 `;
 
 const TabContainer = styled.div`
   display: flex;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e9ecef;
+  background: var(--hb-paper);
+  border-bottom: 1px solid var(--hb-line);
 `;
 
 const Tab = styled.button<{ active: boolean }>`
   flex: 1;
+  min-height: var(--hb-touch);
   padding: 12px 16px;
   background: ${props => props.active ? 'white' : 'transparent'};
   border: none;
-  border-bottom: 2px solid ${props => props.active ? '#667eea' : 'transparent'};
-  color: ${props => props.active ? '#667eea' : '#6c757d'};
+  border-bottom: 2px solid ${props => props.active ? 'var(--hb-accent)' : 'transparent'};
+  color: ${props => props.active ? 'var(--hb-accent)' : 'var(--hb-muted)'};
   font-weight: ${props => props.active ? '600' : '500'};
   cursor: pointer;
   display: flex;
@@ -56,13 +40,13 @@ const Tab = styled.button<{ active: boolean }>`
   transition: all 0.2s ease;
 
   &:hover {
-    background: ${props => props.active ? 'white' : '#e9ecef'};
+    background: ${props => props.active ? 'white' : 'var(--hb-line)'};
   }
 `;
 
 const Content = styled.div`
   flex: 1;
-  padding: 20px;
+  padding: 8px 0;
   overflow-y: auto;
 `;
 
@@ -72,7 +56,7 @@ const Section = styled.div`
 
 const SectionTitle = styled.h4`
   margin: 0 0 16px 0;
-  color: #333;
+  color: var(--hb-text);
   font-size: 16px;
   font-weight: 600;
   display: flex;
@@ -81,11 +65,12 @@ const SectionTitle = styled.h4`
 `;
 
 const Button = styled.button`
-  background: #667eea;
+  background: var(--hb-accent);
   color: white;
+  min-height: 44px;
   border: none;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 14px;
   display: flex;
@@ -98,26 +83,27 @@ const Button = styled.button`
   }
 
   &.secondary {
-    background: #6c757d;
+    background: var(--hb-paper);
+    color: var(--hb-text);
     
     &:hover {
-      background: #5a6268;
+      background: var(--hb-line);
     }
   }
 
   &.danger {
-    background: #dc3545;
+    background: var(--hb-danger);
     
     &:hover {
-      background: #c82333;
+      background: var(--hb-danger);
     }
   }
 `;
 
 const Card = styled.div`
   background: white;
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
+  border: 1px solid var(--hb-line);
+  border-radius: 12px;
   padding: 16px;
   margin-bottom: 12px;
 `;
@@ -143,11 +129,11 @@ const MemberColor = styled.div<{ color: string }>`
 
 const MemberStats = styled.div`
   font-size: 12px;
-  color: #6c757d;
+  color: var(--hb-muted);
 `;
 
 const SportCard = styled(Card)`
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--hb-accent);
 `;
 
 const SportHeader = styled.div`
@@ -159,12 +145,12 @@ const SportHeader = styled.div`
 
 const SportTitle = styled.div`
   font-weight: 600;
-  color: #333;
+  color: var(--hb-text);
 `;
 
 const SportMember = styled.div`
   font-size: 14px;
-  color: #6c757d;
+  color: var(--hb-muted);
 `;
 
 const EquipmentTags = styled.div`
@@ -175,8 +161,8 @@ const EquipmentTags = styled.div`
 `;
 
 const EquipmentTag = styled.span`
-  background: #e9ecef;
-  color: #495057;
+  background: var(--hb-line);
+  color: var(--hb-text);
   padding: 4px 8px;
   border-radius: 12px;
   font-size: 12px;
@@ -195,7 +181,7 @@ const EventHeader = styled.div`
 
 const EventTitle = styled.div`
   font-weight: 600;
-  color: #333;
+  color: var(--hb-text);
   font-size: 14px;
 `;
 
@@ -206,25 +192,25 @@ const EventList = styled.div`
 `;
 
 const EventItem = styled.div`
-  background: #f8f9fa;
-  border-radius: 6px;
+  background: var(--hb-paper);
+  border-radius: 12px;
   padding: 12px;
-  border-left: 3px solid #28a745;
+  border-left: 3px solid var(--hb-success);
 `;
 
 const GameEventItem = styled(EventItem)`
-  border-left-color: #dc3545;
+  border-left-color: var(--hb-danger);
 `;
 
 const EventDetails = styled.div`
   font-size: 13px;
-  color: #6c757d;
+  color: var(--hb-muted);
   margin-top: 4px;
 `;
 
 const EventEquipment = styled.div`
   font-size: 12px;
-  color: #6c757d;
+  color: var(--hb-muted);
   margin-top: 4px;
   font-style: italic;
 `;
@@ -235,7 +221,8 @@ const Modal = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(31, 35, 40, 0.28);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -254,7 +241,7 @@ const ModalContent = styled.div`
 
 const ModalTitle = styled.h3`
   margin: 0 0 20px 0;
-  color: #333;
+  color: var(--hb-text);
 `;
 
 const FormGroup = styled.div`
@@ -265,19 +252,19 @@ const Label = styled.label`
   display: block;
   margin-bottom: 6px;
   font-weight: 500;
-  color: #333;
+  color: var(--hb-text);
 `;
 
 const Input = styled.input`
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
+  border: 1px solid var(--hb-line);
+  border-radius: 12px;
   font-size: 14px;
 
   &:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--hb-accent);
     box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25);
   }
 `;
@@ -285,15 +272,15 @@ const Input = styled.input`
 const Textarea = styled.textarea`
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
+  border: 1px solid var(--hb-line);
+  border-radius: 12px;
   font-size: 14px;
   resize: vertical;
   min-height: 80px;
 
   &:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--hb-accent);
     box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25);
   }
 `;
@@ -301,13 +288,13 @@ const Textarea = styled.textarea`
 const Select = styled.select`
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
+  border: 1px solid var(--hb-line);
+  border-radius: 12px;
   font-size: 14px;
 
   &:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--hb-accent);
     box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.25);
   }
 `;
@@ -321,21 +308,13 @@ const ButtonGroup = styled.div`
 
 const EmptyState = styled.div`
   text-align: center;
-  color: #6c757d;
+  color: var(--hb-muted);
   padding: 40px 20px;
 `;
 
 const EmptyStateText = styled.p`
   margin: 0;
   font-size: 14px;
-`;
-
-const CollapsibleHeader = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 8px 0;
 `;
 
 const CollapsibleContent = styled.div<{ isOpen: boolean }>`
@@ -354,9 +333,15 @@ const SportsWidget: React.FC<SportsWidgetProps> = ({ config, onConfigChange }) =
   const [editingSport, setEditingSport] = useState<Sport | null>(null);
   const [selectedSportForEvent, setSelectedSportForEvent] = useState<Sport | null>(null);
   const [collapsedSports, setCollapsedSports] = useState<Set<string>>(new Set());
+  const [pendingDelete, setPendingDelete] = useState<
+    | { type: 'member'; id: string }
+    | { type: 'sport'; id: string }
+    | { type: 'event'; sportId: string; eventId: string }
+    | null
+  >(null);
 
   // Form states
-  const [memberForm, setMemberForm] = useState({ name: '', color: '#667eea' });
+  const [memberForm, setMemberForm] = useState({ name: '', color: '#3d4fdb' });
   const [sportForm, setSportForm] = useState({ 
     name: '', 
     familyMemberId: '', 
@@ -390,7 +375,7 @@ const SportsWidget: React.FC<SportsWidgetProps> = ({ config, onConfigChange }) =
         color: memberForm.color
       });
       onConfigChange(newConfig);
-      setMemberForm({ name: '', color: '#667eea' });
+      setMemberForm({ name: '', color: '#3d4fdb' });
       setShowAddMemberModal(false);
     }
   };
@@ -402,17 +387,14 @@ const SportsWidget: React.FC<SportsWidgetProps> = ({ config, onConfigChange }) =
         color: memberForm.color
       });
       onConfigChange(newConfig);
-      setMemberForm({ name: '', color: '#667eea' });
+      setMemberForm({ name: '', color: '#3d4fdb' });
       setEditingMember(null);
       setShowAddMemberModal(false);
     }
   };
 
   const handleDeleteMember = (memberId: string) => {
-    if (window.confirm('Are you sure you want to delete this family member? This will also remove all their sports.')) {
-      const newConfig = SportsService.removeFamilyMember(config, memberId);
-      onConfigChange(newConfig);
-    }
+    setPendingDelete({ type: 'member', id: memberId });
   };
 
   const handleAddSport = () => {
@@ -451,10 +433,7 @@ const SportsWidget: React.FC<SportsWidgetProps> = ({ config, onConfigChange }) =
   };
 
   const handleDeleteSport = (sportId: string) => {
-    if (window.confirm('Are you sure you want to delete this sport? This will also remove all its events.')) {
-      const newConfig = SportsService.removeSport(config, sportId);
-      onConfigChange(newConfig);
-    }
+    setPendingDelete({ type: 'sport', id: sportId });
   };
 
   const handleAddEvent = () => {
@@ -492,10 +471,7 @@ const SportsWidget: React.FC<SportsWidgetProps> = ({ config, onConfigChange }) =
   };
 
   const handleDeleteEvent = (sportId: string, eventId: string) => {
-    if (window.confirm('Are you sure you want to delete this event?')) {
-      const newConfig = SportsService.removeSportEvent(config, sportId, eventId);
-      onConfigChange(newConfig);
-    }
+    setPendingDelete({ type: 'event', sportId, eventId });
   };
 
   const openEditMemberModal = (member: FamilyMember) => {
@@ -759,11 +735,6 @@ const SportsWidget: React.FC<SportsWidgetProps> = ({ config, onConfigChange }) =
 
   return (
     <WidgetContainer>
-      <Header>
-        <FiActivity size={20} />
-        <HeaderTitle>Sports Tracker</HeaderTitle>
-      </Header>
-      
       <TabContainer>
         <Tab 
           active={activeTab === 'sports'} 
@@ -820,7 +791,7 @@ const SportsWidget: React.FC<SportsWidgetProps> = ({ config, onConfigChange }) =
               <Button className="secondary" onClick={() => {
                 setShowAddMemberModal(false);
                 setEditingMember(null);
-                setMemberForm({ name: '', color: '#667eea' });
+                setMemberForm({ name: '', color: '#3d4fdb' });
               }}>
                 Cancel
               </Button>
@@ -982,6 +953,46 @@ const SportsWidget: React.FC<SportsWidgetProps> = ({ config, onConfigChange }) =
             </ButtonGroup>
           </ModalContent>
         </Modal>
+      )}
+
+      {pendingDelete?.type === 'member' && (
+        <ConfirmDialog
+          title="Remove family member?"
+          message="This also removes their sports and events."
+          confirmLabel="Remove"
+          danger
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            onConfigChange(SportsService.removeFamilyMember(config, pendingDelete.id));
+            setPendingDelete(null);
+          }}
+        />
+      )}
+      {pendingDelete?.type === 'sport' && (
+        <ConfirmDialog
+          title="Remove sport?"
+          message="This also removes its practices and games."
+          confirmLabel="Remove"
+          danger
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            onConfigChange(SportsService.removeSport(config, pendingDelete.id));
+            setPendingDelete(null);
+          }}
+        />
+      )}
+      {pendingDelete?.type === 'event' && (
+        <ConfirmDialog
+          title="Remove event?"
+          message="This practice or game will be deleted."
+          confirmLabel="Remove"
+          danger
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            onConfigChange(SportsService.removeSportEvent(config, pendingDelete.sportId, pendingDelete.eventId));
+            setPendingDelete(null);
+          }}
+        />
       )}
     </WidgetContainer>
   );

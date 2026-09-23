@@ -1,0 +1,22 @@
+export const theme = {
+  ink: '#1e2430',
+  inkRaised: '#2a3344',
+  paper: '#f6f3ee',
+  card: '#fffcf8',
+  accent: '#3d4fdb',
+  accentDark: '#2c3bb8',
+  text: '#1c1917',
+  muted: '#5c574e',
+  line: '#e6e0d6',
+  danger: '#b42318',
+  success: '#1f7a4d',
+  warning: '#8a5a00',
+  radius: '20px',
+  shadow: '0 10px 30px rgba(20, 16, 12, 0.08)',
+  touch: '48px',
+  google: '#1a73e8',
+  microsoft: '#0f6cbd',
+  apple: '#444444',
+  sports: '#1f7a4d',
+  local: '#3d4fdb'
+};

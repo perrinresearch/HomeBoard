@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { Chore, FamilyMember, ChoreConfig } from '../types';
+import { Chore, ChoreConfig } from '../types';
 import { ChoreService } from '../services/choreService';
 import { FiPlus, FiSettings, FiCheck, FiRotateCcw, FiTrash2, FiUser } from 'react-icons/fi';
+import ConfirmDialog from './ConfirmDialog';
 import { format } from 'date-fns';
 
 interface ChoreWidgetProps {
@@ -23,12 +24,6 @@ const ChoreHeader = styled.div`
   align-items: center;
 `;
 
-const ChoreTitle = styled.h3`
-  margin: 0;
-  font-size: 16px;
-  color: #333;
-`;
-
 const ChoreControls = styled.div`
   display: flex;
   gap: 8px;
@@ -37,37 +32,35 @@ const ChoreControls = styled.div`
 const ControlButton = styled.button`
   background: none;
   border: none;
-  color: #666;
+  color: var(--hb-muted);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  min-width: 44px;
+  min-height: var(--hb-touch);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   
-  &:hover {
-    background-color: #f0f0f0;
+  &:active {
+    background-color: var(--hb-paper);
   }
 `;
 
 const ChoreTabs = styled.div`
   display: flex;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--hb-line);
   margin-bottom: 12px;
 `;
 
 const Tab = styled.button<{ active: boolean }>`
   background: none;
   border: none;
-  padding: 8px 16px;
+  padding: 12px 16px;
+  min-height: var(--hb-touch);
   cursor: pointer;
-  border-bottom: 2px solid ${props => props.active ? '#667eea' : 'transparent'};
-  color: ${props => props.active ? '#667eea' : '#666'};
+  border-bottom: 2px solid ${props => props.active ? 'var(--hb-accent)' : 'transparent'};
+  color: ${props => props.active ? 'var(--hb-accent)' : 'var(--hb-muted)'};
   font-weight: ${props => props.active ? '600' : '400'};
-  
-  &:hover {
-    color: #667eea;
-  }
 `;
 
 const ChoreList = styled.div`
@@ -79,9 +72,9 @@ const ChoreList = styled.div`
 `;
 
 const ChoreCard = styled.div<{ completed: boolean; overdue: boolean }>`
-  background: ${props => props.overdue ? '#fff3cd' : props.completed ? '#d4edda' : 'white'};
-  border: 1px solid ${props => props.overdue ? '#ffeaa7' : props.completed ? '#c3e6cb' : '#e0e0e0'};
-  border-radius: 8px;
+  background: ${props => props.overdue ? '#fdf6e3' : props.completed ? '#eaf5ee' : 'white'};
+  border: 1px solid ${props => props.overdue ? '#f3e3b5' : props.completed ? '#cfe8d8' : 'var(--hb-line)'};
+  border-radius: 12px;
   padding: 12px;
   position: relative;
   transition: all 0.2s ease;
@@ -100,7 +93,7 @@ const ChoreHeaderRow = styled.div`
 
 const ChoreTitleText = styled.div<{ completed: boolean }>`
   font-weight: 600;
-  color: #333;
+  color: var(--hb-text);
   text-decoration: ${props => props.completed ? 'line-through' : 'none'};
   opacity: ${props => props.completed ? 0.6 : 1};
 `;
@@ -113,21 +106,23 @@ const ChoreActions = styled.div`
 const ActionButton = styled.button<{ variant?: 'success' | 'warning' | 'danger' }>`
   background: ${props => {
     switch (props.variant) {
-      case 'success': return '#28a745';
-      case 'warning': return '#ffc107';
-      case 'danger': return '#dc3545';
-      default: return '#6c757d';
+      case 'success': return 'var(--hb-success)';
+      case 'warning': return '#f2c14e';
+      case 'danger': return 'var(--hb-danger)';
+      default: return 'var(--hb-muted)';
     }
   }};
   color: white;
   border: none;
-  padding: 4px 8px;
-  border-radius: 4px;
+  min-width: 44px;
+  min-height: var(--hb-touch);
+  padding: 8px;
+  border-radius: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 14px;
   
   &:hover {
     opacity: 0.8;
@@ -139,7 +134,7 @@ const ChoreDetails = styled.div`
   justify-content: space-between;
   align-items: center;
   font-size: 12px;
-  color: #666;
+  color: var(--hb-muted);
 `;
 
 const ChoreAssignee = styled.div`
@@ -156,26 +151,22 @@ const AssigneeColor = styled.div<{ color: string }>`
 `;
 
 const ChoreDueDate = styled.div<{ overdue: boolean }>`
-  color: ${props => props.overdue ? '#dc3545' : '#666'};
+  color: ${props => props.overdue ? 'var(--hb-danger)' : 'var(--hb-muted)'};
   font-weight: ${props => props.overdue ? '600' : '400'};
 `;
 
 const AddChoreButton = styled.button`
-  background: #4CAF50;
+  background: var(--hb-success);
   color: white;
   border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: 12px 16px;
+  min-height: var(--hb-touch);
+  border-radius: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  transition: background-color 0.2s ease;
-  
-  &:hover {
-    background: #45a049;
-  }
+  font-size: 16px;
 `;
 
 const Modal = styled.div<{ isOpen: boolean }>`
@@ -184,7 +175,8 @@ const Modal = styled.div<{ isOpen: boolean }>`
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(31, 35, 40, 0.28);
+  backdrop-filter: blur(6px);
   display: ${props => props.isOpen ? 'flex' : 'none'};
   align-items: center;
   justify-content: center;
@@ -203,7 +195,7 @@ const ModalContent = styled.div`
 
 const ModalTitle = styled.h3`
   margin: 0 0 16px 0;
-  color: #333;
+  color: var(--hb-text);
 `;
 
 const FormGroup = styled.div`
@@ -214,7 +206,7 @@ const Label = styled.label`
   display: block;
   margin-bottom: 6px;
   font-weight: 600;
-  color: #333;
+  color: var(--hb-text);
   font-size: 14px;
 `;
 
@@ -222,12 +214,12 @@ const Input = styled.input`
   width: 100%;
   padding: 8px 12px;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 14px;
   
   &:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--hb-accent);
   }
 `;
 
@@ -235,12 +227,12 @@ const Select = styled.select`
   width: 100%;
   padding: 8px 12px;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 14px;
   
   &:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--hb-accent);
   }
 `;
 
@@ -248,25 +240,26 @@ const TextArea = styled.textarea`
   width: 100%;
   padding: 8px 12px;
   border: 1px solid #ddd;
-  border-radius: 6px;
+  border-radius: 12px;
   font-size: 14px;
   resize: vertical;
   min-height: 60px;
   
   &:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--hb-accent);
   }
 `;
 
 const Button = styled.button`
-  background: #667eea;
+  background: var(--hb-accent);
   color: white;
   border: none;
-  padding: 10px 16px;
-  border-radius: 6px;
+  padding: 12px 16px;
+  min-height: var(--hb-touch);
+  border-radius: 12px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 16px;
   margin-right: 8px;
   
   &:hover {
@@ -274,10 +267,11 @@ const Button = styled.button`
   }
   
   &.secondary {
-    background: #6c757d;
+    background: var(--hb-paper);
+    color: var(--hb-text);
     
     &:hover {
-      background: #5a6268;
+      background: var(--hb-line);
     }
   }
 `;
@@ -302,7 +296,7 @@ const MemberTag = styled.div<{ color: string }>`
 
 const NoChores = styled.div`
   text-align: center;
-  color: #666;
+  color: var(--hb-muted);
   font-style: italic;
   padding: 20px;
 `;
@@ -311,6 +305,8 @@ const ChoreWidget: React.FC<ChoreWidgetProps> = ({ config, onConfigChange }) => 
   const [activeTab, setActiveTab] = useState<'all' | 'overdue' | 'today'>('all');
   const [showAddChore, setShowAddChore] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState<string | null>(null);
+  const [newMember, setNewMember] = useState({ name: '', color: '#3d4fdb' });
   const [newChore, setNewChore] = useState({
     title: '',
     description: '',
@@ -399,10 +395,9 @@ const ChoreWidget: React.FC<ChoreWidgetProps> = ({ config, onConfigChange }) => 
   return (
     <ChoreContainer>
       <ChoreHeader>
-        <ChoreTitle>Family Chores</ChoreTitle>
-        <ChoreControls>
-          <ControlButton onClick={() => setShowSettings(true)}>
-            <FiSettings size={14} />
+        <ChoreControls style={{ marginLeft: 'auto' }}>
+          <ControlButton onClick={() => setShowSettings(true)} title="Family members">
+            <FiSettings size={20} />
           </ControlButton>
         </ChoreControls>
       </ChoreHeader>
@@ -466,7 +461,7 @@ const ChoreWidget: React.FC<ChoreWidgetProps> = ({ config, onConfigChange }) => 
                 </ChoreHeaderRow>
                 
                 {chore.description && (
-                  <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                  <div style={{ fontSize: '12px', color: 'var(--hb-muted)', marginBottom: '8px' }}>
                     {chore.description}
                   </div>
                 )}
@@ -475,7 +470,7 @@ const ChoreWidget: React.FC<ChoreWidgetProps> = ({ config, onConfigChange }) => 
                   <ChoreAssignee>
                     <FiUser size={12} />
                     {member?.name}
-                    <AssigneeColor color={member?.color || '#666'} />
+                    <AssigneeColor color={member?.color || 'var(--hb-muted)'} />
                   </ChoreAssignee>
                   <ChoreDueDate overdue={overdue}>
                     Due: {formatDueDate(chore.nextDue)}
@@ -494,8 +489,8 @@ const ChoreWidget: React.FC<ChoreWidgetProps> = ({ config, onConfigChange }) => 
         Add Chore
       </AddChoreButton>
 
-      {/* Add Chore Modal */}
-      <Modal isOpen={showAddChore}>
+      {showAddChore && (
+      <Modal isOpen>
         <ModalContent>
           <ModalTitle>Add New Chore</ModalTitle>
           
@@ -556,31 +551,83 @@ const ChoreWidget: React.FC<ChoreWidgetProps> = ({ config, onConfigChange }) => 
           </div>
         </ModalContent>
       </Modal>
+      )}
 
-      {/* Settings Modal */}
-      <Modal isOpen={showSettings}>
+      {showSettings && (
+      <Modal isOpen>
         <ModalContent>
-          <ModalTitle>Family Settings</ModalTitle>
+          <ModalTitle>Family Members</ModalTitle>
+          <p style={{ color: '#555', marginTop: 0 }}>
+            These people are shared with the Sports tracker.
+          </p>
           
           <FormGroup>
-            <Label>Family Members</Label>
             <MemberList>
               {config.members.map((member) => (
                 <MemberTag key={member.id} color={member.color}>
-                  <FiUser size={12} />
+                  <FiUser size={14} />
                   {member.name}
+                  <ControlButton
+                    onClick={() => setMemberToDelete(member.id)}
+                    title={`Remove ${member.name}`}
+                    style={{ minWidth: 32, minHeight: 32, color: 'white' }}
+                  >
+                    <FiTrash2 size={16} />
+                  </ControlButton>
                 </MemberTag>
               ))}
             </MemberList>
           </FormGroup>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <FormGroup>
+            <Label>Add a family member</Label>
+            <Input
+              type="text"
+              placeholder="Name"
+              value={newMember.name}
+              onChange={(e) => setNewMember({ ...newMember, name: e.target.value })}
+            />
+          </FormGroup>
+          <FormGroup>
+            <Label>Color</Label>
+            <Input
+              type="color"
+              value={newMember.color}
+              onChange={(e) => setNewMember({ ...newMember, color: e.target.value })}
+            />
+          </FormGroup>
+          <Button
+            onClick={() => {
+              if (!newMember.name.trim()) return;
+              handleAddMember(newMember.name.trim(), newMember.color);
+              setNewMember({ name: '', color: '#3d4fdb' });
+            }}
+          >
+            Add member
+          </Button>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: 16 }}>
             <Button className="secondary" onClick={() => setShowSettings(false)}>
               Close
             </Button>
           </div>
         </ModalContent>
       </Modal>
+      )}
+
+      {memberToDelete && (
+        <ConfirmDialog
+          title="Remove family member?"
+          message="This removes their chores and any sports assigned to them."
+          confirmLabel="Remove"
+          danger
+          onCancel={() => setMemberToDelete(null)}
+          onConfirm={() => {
+            onConfigChange(ChoreService.removeFamilyMember(config, memberToDelete));
+            setMemberToDelete(null);
+          }}
+        />
+      )}
     </ChoreContainer>
   );
 };

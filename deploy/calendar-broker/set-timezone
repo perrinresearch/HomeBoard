@@ -1,0 +1,35 @@
+#!/bin/bash
+# Set the system timezone. The calendar broker runs this as root through sudo.
+set -euo pipefail
+
+zone="${1:-}"
+if [[ ! "$zone" =~ ^[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)*$ ]]; then
+  echo "Invalid timezone" >&2
+  exit 1
+fi
+if [[ "$zone" == *..* || "$zone" == /* ]]; then
+  echo "Invalid timezone" >&2
+  exit 1
+fi
+
+target="/usr/share/zoneinfo/$zone"
+if [ ! -f "$target" ]; then
+  echo "Unknown timezone" >&2
+  exit 1
+fi
+resolved=$(readlink -f "$target")
+case "$resolved" in
+  /usr/share/zoneinfo/*) ;;
+  *)
+    echo "Unknown timezone" >&2
+    exit 1
+    ;;
+esac
+
+timedatectl set-timezone "$zone"
+
+# Chromium reads the timezone when it starts. Reload the kiosk after the API
+# response has been sent. setsid keeps this from dying with the sudo command.
+if ! setsid -f /bin/sh -c 'sleep 1; pkill -u homeboard chromium || true' >/dev/null 2>&1; then
+  (sleep 1; pkill -u homeboard chromium || true) >/dev/null 2>&1 &
+fi

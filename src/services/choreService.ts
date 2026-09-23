@@ -35,6 +35,28 @@ export class ChoreService {
     };
   }
 
+  static updateFamilyMember(config: ChoreConfig, memberId: string, name: string, color: string): ChoreConfig {
+    return {
+      ...config,
+      members: config.members.map(member =>
+        member.id === memberId ? { ...member, name, color } : member
+      )
+    };
+  }
+
+  static refreshDueChores(config: ChoreConfig): ChoreConfig {
+    const now = new Date();
+    return {
+      ...config,
+      chores: config.chores.map(chore => {
+        if (chore.completed && new Date(chore.nextDue) <= now) {
+          return { ...chore, completed: false };
+        }
+        return chore;
+      })
+    };
+  }
+
   static addChore(
     config: ChoreConfig,
     title: string,

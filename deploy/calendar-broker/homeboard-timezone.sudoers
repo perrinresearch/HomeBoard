@@ -1,0 +1,3 @@
+# Let the calendar broker change only the system timezone.
+Defaults:www-data !requiretty
+www-data ALL=(root) NOPASSWD: /usr/local/lib/homeboard/set-timezone

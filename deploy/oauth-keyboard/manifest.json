@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "HomeBoard sign-in keyboard",
+  "version": "1.1.0",
+  "description": "On-screen keyboard and cancel button for kiosk calendar sign-in.",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://accounts.google.com/*",
+        "https://accounts.youtube.com/*",
+        "https://myaccount.google.com/*",
+        "https://login.microsoftonline.com/*",
+        "https://login.live.com/*",
+        "https://login.microsoft.com/*",
+        "https://account.live.com/*"
+      ],
+      "js": ["keyboard.js"],
+      "css": ["keyboard.css"],
+      "all_frames": true,
+      "run_at": "document_start"
+    }
+  ]
+}

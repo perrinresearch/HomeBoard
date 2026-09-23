@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import styled from 'styled-components';
 import { Widget } from '../types';
-import { FiPlus, FiCloud, FiCalendar, FiCheckSquare, FiActivity } from 'react-icons/fi';
+import { FiCloud, FiCalendar, FiCheckSquare, FiActivity } from 'react-icons/fi';
 
 interface WidgetSelectorProps {
   onAddWidget: (widget: Widget) => void;
@@ -14,7 +14,8 @@ const Modal = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(31, 35, 40, 0.28);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -22,9 +23,9 @@ const Modal = styled.div`
 `;
 
 const ModalContent = styled.div`
-  background: white;
+  background: var(--hb-card);
   padding: 24px;
-  border-radius: 12px;
+  border-radius: var(--hb-radius);
   width: 90%;
   max-width: 500px;
   max-height: 80vh;
@@ -33,7 +34,7 @@ const ModalContent = styled.div`
 
 const ModalTitle = styled.h3`
   margin: 0 0 20px 0;
-  color: #333;
+  color: var(--hb-text);
   font-size: 20px;
   text-align: center;
 `;
@@ -45,36 +46,37 @@ const WidgetGrid = styled.div`
   margin-bottom: 20px;
 `;
 
-const WidgetOption = styled.div`
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
+const WidgetOption = styled.button`
+  border: 2px solid var(--hb-line);
+  border-radius: 16px;
   padding: 20px;
+  min-height: 140px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  background: white;
+  width: 100%;
   
-  &:hover {
-    border-color: #667eea;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  &:active {
+    border-color: var(--hb-accent);
+    background: #f7f8ff;
   }
 `;
 
 const WidgetIcon = styled.div`
   font-size: 32px;
-  color: #667eea;
+  color: var(--hb-accent);
   margin-bottom: 12px;
 `;
 
 const WidgetName = styled.div`
   font-weight: 600;
-  color: #333;
+  color: var(--hb-text);
   margin-bottom: 8px;
 `;
 
 const WidgetDescription = styled.div`
   font-size: 14px;
-  color: #666;
+  color: var(--hb-muted);
   line-height: 1.4;
 `;
 
@@ -85,24 +87,26 @@ const ButtonGroup = styled.div`
 `;
 
 const Button = styled.button`
-  background: #667eea;
+  background: var(--hb-accent);
   color: white;
   border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
+  padding: 12px 20px;
+  min-height: 44px;
+  border-radius: 12px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 16px;
   transition: background-color 0.2s ease;
   
   &:hover {
-    background: #5a6fd8;
+    background: var(--hb-accent-dark);
   }
   
   &.secondary {
-    background: #6c757d;
+    background: var(--hb-paper);
+    color: var(--hb-text);
     
     &:hover {
-      background: #5a6268;
+      background: var(--hb-line);
     }
   }
 `;
@@ -118,7 +122,7 @@ const widgetTypes = [
   {
     type: 'calendar' as const,
     title: 'Calendar',
-    description: 'View and manage events from Google, Apple, and Outlook calendars',
+    description: 'Month and agenda from Google, Outlook, Apple, and this board',
     icon: <FiCalendar />,
     defaultSize: { width: 350, height: 450 }
   },
@@ -145,7 +149,7 @@ const WidgetSelector: React.FC<WidgetSelectorProps> = ({ onAddWidget, onClose })
       type: widgetType.type,
       title: widgetType.title,
       size: widgetType.defaultSize,
-      columnSpan: 1, // Default to 1 column
+      columnSpan: 2,
       config: {}
     };
     

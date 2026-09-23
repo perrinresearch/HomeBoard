@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { AppSettings, ThemeConfig } from '../types';
 import { SettingsService } from '../services/settingsService';
-import { FiX, FiImage, FiDownload, FiUpload } from 'react-icons/fi';
+import { CalendarService } from '../services/calendarService';
+import { FiX, FiImage } from 'react-icons/fi';
 import { MdPalette, MdGradient } from 'react-icons/md';
 
 interface SettingsProps {
@@ -17,7 +18,8 @@ const Modal = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(31, 35, 40, 0.28);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -25,9 +27,9 @@ const Modal = styled.div`
 `;
 
 const ModalContent = styled.div`
-  background: white;
+  background: var(--hb-card);
   padding: 24px;
-  border-radius: 12px;
+  border-radius: var(--hb-radius);
   width: 90%;
   max-width: 600px;
   max-height: 80vh;
@@ -40,12 +42,12 @@ const ModalHeader = styled.div`
   align-items: center;
   margin-bottom: 24px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--hb-line);
 `;
 
 const ModalTitle = styled.h2`
   margin: 0;
-  color: #333;
+  color: var(--hb-text);
   font-size: 24px;
   display: flex;
   align-items: center;
@@ -55,18 +57,18 @@ const ModalTitle = styled.h2`
 const CloseButton = styled.button`
   background: none;
   border: none;
-  color: #666;
+  color: var(--hb-muted);
   cursor: pointer;
   padding: 8px;
-  border-radius: 4px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
   
   &:hover {
-    background: #f0f0f0;
-    color: #333;
+    background: var(--hb-paper);
+    color: var(--hb-text);
   }
 `;
 
@@ -76,7 +78,7 @@ const Section = styled.div`
 
 const SectionTitle = styled.h3`
   margin: 0 0 16px 0;
-  color: #333;
+  color: var(--hb-text);
   font-size: 18px;
   display: flex;
   align-items: center;
@@ -91,18 +93,18 @@ const PresetGrid = styled.div`
 `;
 
 const PresetButton = styled.button<{ isActive: boolean }>`
-  background: ${props => props.isActive ? '#667eea' : '#f8f9fa'};
-  color: ${props => props.isActive ? 'white' : '#333'};
-  border: 2px solid ${props => props.isActive ? '#667eea' : '#e0e0e0'};
+  background: ${props => props.isActive ? 'var(--hb-accent)' : 'var(--hb-paper)'};
+  color: ${props => props.isActive ? 'white' : 'var(--hb-text)'};
+  border: 2px solid ${props => props.isActive ? 'var(--hb-accent)' : 'var(--hb-line)'};
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
   transition: all 0.2s ease;
   
   &:hover {
-    border-color: #667eea;
+    border-color: var(--hb-accent);
     transform: translateY(-1px);
   }
 `;
@@ -115,46 +117,64 @@ const Label = styled.label`
   display: block;
   margin-bottom: 8px;
   font-weight: 600;
-  color: #333;
+  color: var(--hb-text);
   font-size: 14px;
 `;
 
 const Select = styled.select`
   width: 100%;
   padding: 10px;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  border: 1px solid var(--hb-line);
+  border-radius: 12px;
   font-size: 14px;
   
   &:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--hb-accent);
   }
+`;
+
+const TimezoneSelect = styled(Select)`
+  min-height: 52px;
+  font-size: 18px;
+`;
+
+const Hint = styled.p`
+  margin: 8px 0 0;
+  color: var(--hb-muted);
+  font-size: 14px;
+`;
+
+const FieldError = styled.p`
+  margin: 8px 0 0;
+  color: #b42318;
+  font-size: 14px;
 `;
 
 const Input = styled.input`
   width: 100%;
+  min-height: 52px;
   padding: 10px;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  font-size: 14px;
-  
+  border: 1px solid var(--hb-line);
+  border-radius: 12px;
+  font-size: 18px;
+
   &:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--hb-accent);
   }
 `;
 
 const ColorInput = styled.input`
   width: 60px;
   height: 40px;
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
+  border: 1px solid var(--hb-line);
+  border-radius: 12px;
   cursor: pointer;
   
   &:focus {
     outline: none;
-    border-color: #667eea;
+    border-color: var(--hb-accent);
   }
 `;
 
@@ -167,16 +187,16 @@ const ColorGroup = styled.div`
 
 const ColorLabel = styled.span`
   font-size: 14px;
-  color: #666;
+  color: var(--hb-muted);
   min-width: 80px;
 `;
 
 const AddColorButton = styled.button`
-  background: #667eea;
+  background: var(--hb-accent);
   color: white;
   border: none;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 12px;
   transition: background-color 0.2s ease;
@@ -187,26 +207,26 @@ const AddColorButton = styled.button`
 `;
 
 const RemoveColorButton = styled.button`
-  background: #dc3545;
+  background: var(--hb-danger);
   color: white;
   border: none;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 12px;
   transition: background-color 0.2s ease;
   
   &:hover {
-    background: #c82333;
+    background: var(--hb-danger);
   }
 `;
 
 const PreviewBox = styled.div<{ background: string }>`
   width: 100%;
   height: 80px;
-  border-radius: 8px;
+  border-radius: 12px;
   background: ${props => props.background};
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--hb-line);
   margin-top: 8px;
   display: flex;
   align-items: center;
@@ -223,7 +243,7 @@ const OpacitySlider = styled.input`
 
 const OpacityValue = styled.span`
   font-size: 12px;
-  color: #666;
+  color: var(--hb-muted);
   margin-left: 8px;
 `;
 
@@ -233,20 +253,20 @@ const ButtonGroup = styled.div`
   gap: 12px;
   margin-top: 24px;
   padding-top: 16px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--hb-line);
 `;
 
 const Button = styled.button`
   padding: 10px 20px;
   border: none;
-  border-radius: 6px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
   transition: background-color 0.2s ease;
   
   &.primary {
-    background: #667eea;
+    background: var(--hb-accent);
     color: white;
     
     &:hover {
@@ -254,19 +274,76 @@ const Button = styled.button`
     }
   }
   
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
   &.secondary {
-    background: #6c757d;
+    background: var(--hb-paper);
+    color: var(--hb-text);
     color: white;
     
     &:hover {
-      background: #5a6268;
+      background: var(--hb-line);
     }
   }
 `;
 
+function groupTimezones(zones: string[]) {
+  const groups = new Map<string, string[]>();
+  zones.forEach((zone) => {
+    const slash = zone.indexOf('/');
+    const region = slash === -1 ? 'Other' : zone.slice(0, slash);
+    const list = groups.get(region) || [];
+    list.push(zone);
+    groups.set(region, list);
+  });
+  return Array.from(groups.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function zoneClock(zone: string) {
+  try {
+    return new Date().toLocaleTimeString([], { timeZone: zone, hour: 'numeric', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
 const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose }) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
+  const [timezone, setTimezone] = useState('');
+  const [savedTimezone, setSavedTimezone] = useState('');
+  const [timezones, setTimezones] = useState<string[]>([]);
+  const [zoneQuery, setZoneQuery] = useState('');
+  const [timezoneError, setTimezoneError] = useState('');
+  const [saving, setSaving] = useState(false);
   const presetThemes = SettingsService.getPresetThemes();
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const [current, list] = await Promise.all([
+          CalendarService.fetchTimezone(),
+          CalendarService.fetchTimezones()
+        ]);
+        if (cancel) {
+          return;
+        }
+        setTimezone(current);
+        setSavedTimezone(current);
+        setTimezones(list);
+      } catch (error) {
+        if (!cancel) {
+          setTimezoneError(error instanceof Error ? error.message : 'Timezone settings are unavailable');
+        }
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, []);
 
   const handlePresetSelect = (preset: { name: string; theme: ThemeConfig }) => {
     setLocalSettings({
@@ -394,8 +471,19 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    setSaving(true);
+    setTimezoneError('');
     onSettingsChange(localSettings);
+    if (timezone && timezone !== savedTimezone) {
+      try {
+        await CalendarService.setTimezone(timezone);
+      } catch (error) {
+        setSaving(false);
+        setTimezoneError(error instanceof Error ? error.message : 'Could not set the timezone');
+        return;
+      }
+    }
     onClose();
   };
 
@@ -403,6 +491,19 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
     setLocalSettings(settings);
     onClose();
   };
+
+  const zoneOptions = useMemo(() => {
+    const query = zoneQuery.trim().toLowerCase().replace(/\s+/g, ' ');
+    const matched = query
+      ? timezones.filter((zone) => zone.toLowerCase().replace(/[_/]/g, ' ').includes(query))
+      : timezones;
+    if (timezone && !matched.includes(timezone)) {
+      return [timezone, ...matched];
+    }
+    return matched;
+  }, [timezones, timezone, zoneQuery]);
+  const zoneGroups = useMemo(() => groupTimezones(zoneOptions), [zoneOptions]);
+  const clock = timezone ? zoneClock(timezone) : '';
 
   const currentBackgroundCSS = SettingsService.generateCSSBackground(localSettings.theme.background);
   const currentHeaderCSS = SettingsService.generateCSSHeader(localSettings.theme.header);
@@ -414,12 +515,46 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
         <ModalHeader>
           <ModalTitle>
             <MdPalette />
-            Theme Settings
+            Settings
           </ModalTitle>
           <CloseButton onClick={onClose}>
             <FiX size={20} />
           </CloseButton>
         </ModalHeader>
+
+        <Section>
+          <SectionTitle>Timezone</SectionTitle>
+          <FormGroup>
+            <Label htmlFor="timezone-search">Find a timezone</Label>
+            <Input
+              id="timezone-search"
+              value={zoneQuery}
+              placeholder="Chicago, New York, London"
+              onChange={(event) => setZoneQuery(event.target.value)}
+              disabled={!timezones.length}
+            />
+          </FormGroup>
+          <FormGroup>
+            <Label htmlFor="timezone">Board timezone</Label>
+            <TimezoneSelect
+              id="timezone"
+              value={timezone}
+              disabled={!timezones.length || saving}
+              onChange={(event) => setTimezone(event.target.value)}
+            >
+              {!timezone && <option value="">{timezoneError ? 'Unavailable' : 'Loading…'}</option>}
+              {zoneGroups.map(([region, zones]) => (
+                <optgroup key={region} label={region}>
+                  {zones.map((zone) => (
+                    <option key={zone} value={zone}>{zone}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </TimezoneSelect>
+            {clock ? <Hint>{clock} in this timezone. Saving reloads the board.</Hint> : null}
+            {timezoneError ? <FieldError>{timezoneError}</FieldError> : null}
+          </FormGroup>
+        </Section>
 
         <Section>
           <SectionTitle>Preset Themes</SectionTitle>
@@ -459,7 +594,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
               <Label>Background Color</Label>
               <ColorInput
                 type="color"
-                value={localSettings.theme.background.color || '#667eea'}
+                value={localSettings.theme.background.color || '#1e2430'}
                 onChange={(e) => handleBackgroundColorChange(e.target.value)}
               />
             </FormGroup>
@@ -634,7 +769,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
               <Label>Widget Header Color</Label>
               <ColorInput
                 type="color"
-                value={localSettings.theme.widgetHeader.color || '#667eea'}
+                value={localSettings.theme.widgetHeader.color || '#3d4fdb'}
                 onChange={(e) => handleWidgetHeaderColorChange(e.target.value)}
               />
             </FormGroup>
@@ -684,8 +819,8 @@ const Settings: React.FC<SettingsProps> = ({ settings, onSettingsChange, onClose
           <Button className="secondary" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button className="primary" onClick={handleSave}>
-            Save Changes
+          <Button className="primary" onClick={() => { handleSave(); }} disabled={saving}>
+            {saving ? 'Saving…' : 'Save Changes'}
           </Button>
         </ButtonGroup>
       </ModalContent>

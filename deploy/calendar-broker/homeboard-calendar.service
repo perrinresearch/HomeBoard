@@ -1,0 +1,16 @@
+[Unit]
+Description=HomeBoard calendar broker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+EnvironmentFile=-/etc/homeboard/calendar.env
+ExecStart=/usr/bin/python3 /usr/local/lib/homeboard/homeboard-calendar.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

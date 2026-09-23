@@ -16,6 +16,15 @@ export interface WeatherLocation {
   isCurrentLocation: boolean;
 }
 
+export interface DailyForecast {
+  date: string;
+  high: number;
+  low: number;
+  icon: string;
+  summary: string;
+  rainChance: number;
+}
+
 export interface WeatherData {
   location: WeatherLocation;
   temperature: number;
@@ -34,6 +43,17 @@ export interface CalendarEvent {
   description?: string;
   location?: string;
   color?: string;
+  source?: 'local' | 'sports' | 'google' | 'microsoft' | 'apple';
+  calendarName?: string;
+  familyMemberId?: string;
+  allDay?: boolean;
+}
+
+export interface ShoppingItem {
+  id: string;
+  title: string;
+  quantity?: string;
+  checked: boolean;
 }
 
 export interface CalendarConfig {
@@ -135,7 +155,9 @@ export interface AppState {
   widgets: Widget[];
   weatherLocations: WeatherLocation[];
   calendarConfig: CalendarConfig;
+  familyMembers: FamilyMember[];
   choreConfig: ChoreConfig;
   sportsConfig: SportsConfig;
+  shoppingList: ShoppingItem[];
   settings: AppSettings;
 } 

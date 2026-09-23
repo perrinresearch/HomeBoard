@@ -1,0 +1,17 @@
+[Unit]
+Description=HomeBoard unattended first-boot setup
+# Wait for the rootfs expansion and for networking to have had a chance to
+# come up; the script does its own longer wait for actual DNS resolution.
+After=network-online.target armbian-resize-filesystem.service ssh.service
+Wants=network-online.target
+ConditionPathExists=!/var/lib/homeboard-firstboot.done
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+ExecStart=/usr/local/bin/homeboard-firstboot.sh
+# apt on a slow SD card over wifi can take a while.
+TimeoutStartSec=45min
+
+[Install]
+WantedBy=multi-user.target
