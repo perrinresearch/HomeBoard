@@ -9,6 +9,7 @@ Setup for every part of the system is in [SETUP.md](SETUP.md).
 | Dashboard, Firebase, weather, calendars | [SETUP.md](SETUP.md) |
 | Orange Pi kiosk | [deploy/README.md](deploy/README.md) |
 | Android app | [android/README.md](android/README.md) |
+| Speakers, microphone, and a language model | [FUTURE.md](FUTURE.md) |
 
 ```bash
 npm install

@@ -1,4 +1,4 @@
-import { AppSettings, AppState, FamilyMember, Widget } from '../types';
+import { AlarmSound, AppSettings, AppState, BoardReminder, BoardTimer, FamilyMember, Widget } from '../types';
 import { ChoreService } from './choreService';
 import { SportsService } from './sportsService';
 import { SettingsService } from './settingsService';
@@ -35,6 +35,8 @@ export function createDefaultAppState(): AppState {
       sports: []
     },
     shoppingList: [],
+    timers: [],
+    reminders: [],
     settings: SettingsService.createDefaultSettings()
   };
 }
@@ -68,6 +70,27 @@ function upgradeTheme(settings: AppSettings | undefined): AppSettings {
     return defaults;
   }
   return settings;
+}
+
+const ALARM_SOUNDS: AlarmSound[] = ['chime', 'bell', 'beeps', 'pulse', 'off'];
+
+function withAlarmSound(settings: AppSettings, raw?: AppSettings): AppSettings {
+  const chosen = raw?.alarmSound;
+  return {
+    ...settings,
+    alarmSound: chosen && ALARM_SOUNDS.includes(chosen) ? chosen : settings.alarmSound || 'chime'
+  };
+}
+
+function withScreenTimeout(settings: AppSettings, raw?: AppSettings): AppSettings {
+  const minutes = raw?.screenTimeoutMinutes;
+  const chosen = typeof minutes === 'number' && Number.isFinite(minutes) && minutes >= 0
+    ? minutes
+    : settings.screenTimeoutMinutes;
+  return {
+    ...settings,
+    screenTimeoutMinutes: typeof chosen === 'number' && chosen >= 0 ? chosen : 15
+  };
 }
 
 function mergeMembers(primary: FamilyMember[] = [], ...others: FamilyMember[][]): FamilyMember[] {
@@ -112,7 +135,12 @@ export function normalizeAppState(raw: Partial<AppState> | null | undefined): Ap
       sports: raw.sportsConfig?.sports || SportsService.createDefaultSportsConfig().sports
     },
     shoppingList: raw.shoppingList || [],
-    settings: upgradeTheme(raw.settings) || defaults.settings
+    timers: Array.isArray(raw.timers) ? raw.timers as BoardTimer[] : [],
+    reminders: Array.isArray(raw.reminders) ? raw.reminders as BoardReminder[] : [],
+    settings: withAlarmSound(
+      withScreenTimeout(upgradeTheme(raw.settings) || defaults.settings, raw.settings),
+      raw.settings
+    )
   };
 }
 

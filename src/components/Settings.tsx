@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { AppSettings, AppState, ThemeConfig } from '../types';
 import { SettingsService } from '../services/settingsService';
+import { ALARM_OPTIONS, previewAlarm } from '../services/alarm';
 import { CalendarService } from '../services/calendarService';
 import HouseholdSettings from './HouseholdSettings';
 import WifiPanel from './WifiPanel';
@@ -144,6 +145,62 @@ const Select = styled.select`
 const TimezoneSelect = styled(Select)`
   min-height: 52px;
   font-size: 18px;
+`;
+
+const AlarmList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const AlarmRow = styled.div<{ active: boolean }>`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 14px;
+  border: 2px solid ${props => props.active ? 'var(--hb-accent)' : 'var(--hb-line)'};
+  background: ${props => props.active ? 'var(--hb-accent)' : 'white'};
+  color: ${props => props.active ? 'white' : 'var(--hb-text)'};
+`;
+
+const AlarmChoice = styled.button`
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+`;
+
+const AlarmName = styled.span`
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+`;
+
+const AlarmDetail = styled.span`
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.8;
+`;
+
+const PlaySound = styled.button<{ active: boolean }>`
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: none;
+  background: ${props => props.active ? 'white' : 'var(--hb-paper)'};
+  color: var(--hb-text);
+  font-weight: 700;
+  cursor: pointer;
+  flex: 0 0 auto;
 `;
 
 const Hint = styled.p`
@@ -556,6 +613,57 @@ const Settings: React.FC<SettingsProps> = ({ settings, appState, panel, embedded
             {clock ? <Hint>{clock} in this timezone. Saving reloads the board.</Hint> : null}
             {timezoneError ? <FieldError>{timezoneError}</FieldError> : null}
           </FormGroup>
+        </Section>}
+
+        {panel === 'board' && <Section>
+          <SectionTitle>Screen</SectionTitle>
+          <FormGroup>
+            <Label htmlFor="screen-timeout">Sleep after</Label>
+            <TimezoneSelect
+              id="screen-timeout"
+              value={localSettings.screenTimeoutMinutes}
+              onChange={(event) => setLocalSettings({
+                ...localSettings,
+                screenTimeoutMinutes: Number(event.target.value)
+              })}
+            >
+              <option value={0}>Never</option>
+              <option value={1}>1 minute</option>
+              <option value={5}>5 minutes</option>
+              <option value={15}>15 minutes</option>
+              <option value={30}>30 minutes</option>
+              <option value={60}>1 hour</option>
+            </TimezoneSelect>
+            <Hint>The board dims to the clock, then wakes when someone touches it. Save to apply.</Hint>
+          </FormGroup>
+        </Section>}
+
+        {panel === 'board' && <Section>
+          <SectionTitle>Alarm</SectionTitle>
+          <AlarmList role="radiogroup" aria-label="Alarm sound">
+            {ALARM_OPTIONS.map(option => {
+              const active = (localSettings.alarmSound || 'chime') === option.id;
+              return (
+                <AlarmRow key={option.id} active={active}>
+                  <AlarmChoice
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setLocalSettings({ ...localSettings, alarmSound: option.id })}
+                  >
+                    <AlarmName>{option.label}</AlarmName>
+                    <AlarmDetail>{option.detail}</AlarmDetail>
+                  </AlarmChoice>
+                  {option.id !== 'off' && (
+                    <PlaySound type="button" active={active} onClick={() => previewAlarm(option.id)}>
+                      Play
+                    </PlaySound>
+                  )}
+                </AlarmRow>
+              );
+            })}
+          </AlarmList>
+          <Hint>Say “HomeBoard”, then “timer 10 minutes”, “remind me at 7 to…”, or “stop”. Save to apply.</Hint>
         </Section>}
 
         {panel === 'appearance' && <Section>

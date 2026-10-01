@@ -16,7 +16,9 @@ export class SettingsService {
           type: 'color',
           color: '#5561d6'
         }
-      }
+      },
+      screenTimeoutMinutes: 15,
+      alarmSound: 'chime'
     };
   }
 

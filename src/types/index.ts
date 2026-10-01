@@ -148,8 +148,30 @@ export interface ThemeConfig {
   };
 }
 
+export interface BoardTimer {
+  id: string;
+  label: string;
+  /** When the countdown reaches zero, as epoch milliseconds. */
+  endsAt: number;
+  durationMs: number;
+}
+
+export interface BoardReminder {
+  id: string;
+  label: string;
+  /** When the reminder is due, as epoch milliseconds. */
+  at: number;
+}
+
+/** Tone played on this kiosk when a timer or reminder is due. Speech can use the same alert later. */
+export type AlarmSound = 'chime' | 'bell' | 'beeps' | 'pulse' | 'off';
+
 export interface AppSettings {
   theme: ThemeConfig;
+  /** Minutes of no touch before the clock screen. 0 stays on. */
+  screenTimeoutMinutes: number;
+  /** Speaker tone for due timers and reminders. Stays on this kiosk. */
+  alarmSound: AlarmSound;
 }
 
 export interface AppState {
@@ -160,5 +182,7 @@ export interface AppState {
   choreConfig: ChoreConfig;
   sportsConfig: SportsConfig;
   shoppingList: ShoppingItem[];
+  timers: BoardTimer[];
+  reminders: BoardReminder[];
   settings: AppSettings;
 } 

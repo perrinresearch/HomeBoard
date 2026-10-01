@@ -74,6 +74,18 @@ async function readJson<T>(response: Response): Promise<T> {
   return body as T;
 }
 
+/** Empty events with provider errors means the feed failed, not that the week is blank. */
+export function calendarFetchNotice(body: RemoteEventsResponse): string {
+  if ((body.events && body.events.length) || !body.errors?.length) {
+    return '';
+  }
+  const message = body.errors.map(item => item.message).join(' ');
+  if (/invalid_grant|expired or revoked/i.test(message)) {
+    return 'Google Calendar needs to be signed in again. Open Settings → Calendars.';
+  }
+  return 'Calendar could not load events. Open Settings → Calendars.';
+}
+
 export class CalendarService {
   static async fetchSources(): Promise<CalendarSources> {
     const response = await fetch('/api/sources');
@@ -95,7 +107,10 @@ export class CalendarService {
   }
 
   static async disconnect(provider: 'google' | 'microsoft', accountId: string): Promise<CalendarSources> {
-    const response = await fetch(`/api/${provider}?id=${encodeURIComponent(accountId)}`, { method: 'DELETE' });
+    const response = await fetch(`/api/${provider}?id=${encodeURIComponent(accountId)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
     return readJson<CalendarSources>(response);
   }
 
@@ -217,7 +232,10 @@ export class CalendarService {
   }
 
   static async removeApple(id: string): Promise<CalendarSources> {
-    const response = await fetch(`/api/apple?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const response = await fetch(`/api/apple?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
     return readJson<CalendarSources>(response);
   }
 

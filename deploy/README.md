@@ -103,7 +103,9 @@ It installs nginx, Chromium, and a minimal X stack, creates the `homeboard`
 kiosk user, registers a `HomeBoard Kiosk` X session, turns on LightDM autologin
 into that session, and caps journald to RAM. Because the session runs the
 browser directly instead of a desktop, there is no panel, no wallpaper, and no
-window decoration — only HomeBoard is on screen.
+window decoration — only HomeBoard is on screen. Chromium is allowed to play
+timer and reminder alarms without a tap. Re-run provisioning so a board that
+was set up earlier picks up that flag.
 
 ## Day-to-day
 
@@ -121,7 +123,11 @@ The launcher loop brings Chromium back within a few seconds.
 Google and Outlook sign-in, and Apple share links, are handled by a small
 service on the Pi (`homeboard-calendar`). The browser never sees the client
 secrets or refresh tokens. `./deploy/push-build.sh` installs that service and
-proxies `http://127.0.0.1/api/` to it. Several accounts of each kind can be
+proxies `http://127.0.0.1/api/` to it. nginx allows that path only from the
+kiosk itself (`127.0.0.1` and `::1`). Another device that opens the board
+over the network can see the page, but cannot call the calendar, Wi-Fi, or
+timezone API. Writes also have to be `application/json` from
+`http://127.0.0.1`, so another page open on the kiosk cannot submit them. Several accounts of each kind can be
 connected. How to create the Firebase project, the OAuth clients, and the
 weather key is in [SETUP.md](../SETUP.md).
 

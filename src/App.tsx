@@ -4,17 +4,23 @@ import { WeatherLocation, CalendarConfig, ChoreConfig, SportsConfig, AppState, C
 import { WeatherService } from './services/weatherService';
 import { ChoreService } from './services/choreService';
 import { SportsService } from './services/sportsService';
-import { CalendarService, WifiStatus, calendarOwners } from './services/calendarService';
+import { CalendarService, WifiStatus, calendarOwners, calendarFetchNotice } from './services/calendarService';
 import { SettingsService } from './services/settingsService';
 import { loadAppState, saveAppState } from './services/storageService';
 import { pushRemoteEvents, useHouseholdSync } from './services/householdService';
 import ConfigShell, { ConfigSection } from './components/ConfigShell';
 import ChoreWidget from './components/ChoreWidget';
 import OnScreenKeyboard from './components/OnScreenKeyboard';
+import ScreenSleep from './components/ScreenSleep';
+import Alerts from './components/Alerts';
+import AlarmStop from './components/AlarmStop';
+import { listenForAlerts, setAlarmSound, unlockAlarm } from './services/alarm';
+import { listenForVoiceCommands } from './services/voiceListen';
 import ScheduleBoard from './components/ScheduleBoard';
 import WeatherNow from './components/WeatherNow';
 import WeatherWidget from './components/WeatherWidget';
-import { FiSettings, FiWifi, FiWifiOff } from 'react-icons/fi';
+import { FiWifi, FiWifiOff } from 'react-icons/fi';
+import VoiceListenChip from './components/VoiceListenChip';
 
 const AppContainer = styled.div<{ background: string; light: boolean }>`
   min-height: 100vh;
@@ -35,7 +41,7 @@ const Dashboard = styled.div`
 const Header = styled.header`
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   margin-bottom: 18px;
   gap: 16px;
 `;
@@ -51,6 +57,22 @@ const Divider = styled.span`
   height: 36px;
   background: currentColor;
   opacity: 0.12;
+`;
+
+const CalendarNotice = styled.button`
+  display: block;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 12px;
+  background: #b45309;
+  color: #fff7ed;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
 `;
 
 const todayKey = () => {
@@ -76,11 +98,6 @@ const DateLine = styled.div`
   font-size: 17px;
   font-weight: 500;
   opacity: 0.6;
-`;
-
-const HeaderActions = styled.div`
-  display: flex;
-  gap: 8px;
 `;
 
 const HeaderButton = styled.button<{ chrome: string }>`
@@ -196,6 +213,7 @@ const App: React.FC = () => {
   const [forecast, setForecast] = useState<DailyForecast[]>([]);
   const [apiEvents, setApiEvents] = useState<CalendarEvent[] | null>(null);
   const [cloudEvents, setCloudEvents] = useState<CalendarEvent[]>([]);
+  const [calendarNotice, setCalendarNotice] = useState('');
   const remoteEvents = apiEvents ?? cloudEvents;
   const onCloudEvents = useCallback((events: CalendarEvent[]) => {
     setCloudEvents(events);
@@ -268,6 +286,12 @@ const App: React.FC = () => {
       try {
         const body = await CalendarService.fetchEvents();
         if (stop) {
+          return;
+        }
+        const notice = calendarFetchNotice(body);
+        setCalendarNotice(notice);
+        if (notice) {
+          setApiEvents(null);
           return;
         }
         const events = body.events.map(event => ({
@@ -411,6 +435,22 @@ const App: React.FC = () => {
     syncFamilyMembers(config.members, { sportsConfig: config });
   };
 
+  useEffect(() => {
+    setAlarmSound(appState.settings.alarmSound || 'chime');
+  }, [appState.settings.alarmSound]);
+
+  useEffect(() => listenForAlerts(), []);
+
+  useEffect(() => listenForVoiceCommands({
+    addTimer: (timer) => setAppState(prev => ({ ...prev, timers: [...(prev.timers || []), timer] })),
+    addReminder: (reminder) => setAppState(prev => ({ ...prev, reminders: [...(prev.reminders || []), reminder] }))
+  }), []);
+
+  useEffect(() => {
+    window.addEventListener('pointerdown', unlockAlarm);
+    return () => window.removeEventListener('pointerdown', unlockAlarm);
+  }, []);
+
   const handleSettingsChange = (settings: AppSettings) => {
     setAppState(prev => ({
       ...prev,
@@ -463,14 +503,23 @@ const App: React.FC = () => {
                 </WifiChip>
               </>
             ) : null}
+            <Divider />
+            <VoiceListenChip />
           </HeaderLeft>
-          <HeaderActions>
-            <HeaderButton chrome={headerChrome} onClick={() => setConfigSection('family')}>
-              <FiSettings size={20} />
-              Settings
-            </HeaderButton>
-          </HeaderActions>
+          <Alerts
+            timers={appState.timers || []}
+            reminders={appState.reminders || []}
+            chrome={headerChrome}
+            onOpenSettings={() => setConfigSection('family')}
+            onChange={(timers, reminders) => setAppState(prev => ({ ...prev, timers, reminders }))}
+          />
         </Header>
+
+        {calendarNotice ? (
+          <CalendarNotice type="button" onClick={() => setConfigSection('calendars')}>
+            {calendarNotice}
+          </CalendarNotice>
+        ) : null}
 
         <ScheduleBoard
           members={appState.familyMembers}
@@ -550,6 +599,12 @@ const App: React.FC = () => {
           />
         )}
         <OnScreenKeyboard />
+        <ScreenSleep
+          timeoutMinutes={appState.settings.screenTimeoutMinutes ?? 15}
+          timers={appState.timers || []}
+          reminders={appState.reminders || []}
+        />
+        <AlarmStop />
       </Dashboard>
     </AppContainer>
   );

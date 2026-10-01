@@ -36,7 +36,7 @@ FIREBASE_PROJECT_ID=your-project-id
 BOARD_URL=http://192.168.5.110
 ```
 
-`FIREBASE_PROJECT_ID` must match `REACT_APP_FIREBASE_PROJECT_ID` in the kiosk build. `BOARD_URL` is only used on a tablet. On the home network use the Pi’s address, such as `http://192.168.5.110`, or `http://homeboard.local` if that name resolves. The app allows plain HTTP so the Pi does not need TLS.
+`FIREBASE_PROJECT_ID` must match `REACT_APP_FIREBASE_PROJECT_ID` in the kiosk build. `BOARD_URL` is only used on a tablet. On the home network use the Pi’s address, such as `http://192.168.5.110`, or `http://homeboard.local` if that name resolves. The app allows plain HTTP so the Pi does not need TLS. `/api/` on the Pi answers only the kiosk browser, so a tablet can show the board but cannot change Wi-Fi, timezone, or calendar accounts. Those stay on the kiosk.
 
 `firebase.properties` is gitignored. The values are compiled into the app, so change the file and then rebuild.
 

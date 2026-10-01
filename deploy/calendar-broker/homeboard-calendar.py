@@ -553,11 +553,15 @@ def google_account_events(account, start, end):
 
 def google_events(start, end):
     events = []
+    failures = []
     for account in state().get("google", []):
         try:
             events.extend(google_account_events(account, start, end))
         except Exception as error:  # noqa: BLE001 - one Gmail account must not hide the others
             print(f"google {account.get('email')}: {error}")
+            failures.append(f"{account.get('email') or 'Google'}: {error}")
+    if failures and not events:
+        raise RuntimeError("; ".join(failures))
     return events
 
 
@@ -603,11 +607,15 @@ def microsoft_account_events(account, start, end):
 
 def microsoft_events(start, end):
     events = []
+    failures = []
     for account in state().get("microsoft", []):
         try:
             events.extend(microsoft_account_events(account, start, end))
         except Exception as error:  # noqa: BLE001 - one Microsoft account must not hide the others
             print(f"microsoft {account.get('email')}: {error}")
+            failures.append(f"{account.get('email') or 'Outlook'}: {error}")
+    if failures and not events:
+        raise RuntimeError("; ".join(failures))
     return events
 
 
@@ -749,8 +757,13 @@ def apple_events(start, end):
     return events
 
 
-def remember_household(household_id):
-    household_id = (household_id or "").strip()
+def remember_household(authorization):
+    """The household is the uid of the Firebase user who signed in on this board."""
+    scheme, _, id_token = (authorization or "").strip().partition(" ")
+    if scheme.lower() != "bearer" or not id_token.strip():
+        raise RuntimeError("Sign in to the household first")
+    from firestore_push import verify_id_token
+    household_id = verify_id_token(id_token.strip())
     if not HOUSEHOLD_ID.match(household_id):
         raise RuntimeError("Invalid household id")
     write_json(HOUSEHOLD_PATH, {"id": household_id})
@@ -759,9 +772,12 @@ def remember_household(household_id):
 
 def publish_events():
     payload = collect_events()
+    events = payload.get("events") or []
+    if not events:
+        return payload
     try:
         from firestore_push import push_remote_events
-        push_remote_events(payload.get("events") or [])
+        push_remote_events(events)
     except Exception as error:  # noqa: BLE001 - calendar reads must still succeed
         print("firestore push failed:", error)
     return payload
@@ -785,7 +801,8 @@ def collect_events():
         except Exception as error:  # noqa: BLE001 - one provider must not blank the others
             errors.append({"provider": provider, "message": str(error)})
     payload = {"events": events, "errors": errors}
-    write_json(CACHE_PATH, {"expires": time.time() + CACHE_SECONDS, "payload": payload}, mode=0o644)
+    if not errors:
+        write_json(CACHE_PATH, {"expires": time.time() + CACHE_SECONDS, "payload": payload}, mode=0o644)
     return payload
 
 
@@ -1111,6 +1128,14 @@ def set_wifi(ssid, password):
     return format_wifi(run_wifi(["apply"], stdin=json.dumps({"ssid": ssid, "password": password}), timeout=45))
 
 
+def write_request_ok(origin, content_type):
+    """Writes are JSON from the kiosk page, not a form or another site."""
+    if (origin or "").strip().rstrip("/") != ORIGIN:
+        return False
+    media = (content_type or "").split(";", 1)[0].strip().lower()
+    return media == "application/json"
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print("%s - %s" % (self.address_string(), fmt % args))
@@ -1131,6 +1156,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def require_write(self):
+        if not write_request_ok(self.headers.get("Origin"), self.headers.get("Content-Type")):
+            raise RuntimeError("Writes must be JSON from the board")
 
     def redirect(self, location):
         self.send_response(302)
@@ -1187,6 +1216,7 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/")
         try:
+            self.require_write()
             body = self.read_body()
             if path == "/apple":
                 self.send_json(add_apple(body.get("url", "")))
@@ -1213,7 +1243,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/wifi":
                 self.send_json(set_wifi(body.get("ssid", ""), body.get("password", "")))
             elif path == "/household":
-                self.send_json({"id": remember_household(body.get("id", ""))})
+                self.send_json({"id": remember_household(self.headers.get("Authorization"))})
             else:
                 self.send_json({"error": "Not found"}, 404)
         except Exception as error:  # noqa: BLE001
@@ -1224,6 +1254,7 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/")
         query = urllib.parse.parse_qs(parsed.query)
         try:
+            self.require_write()
             if path == "/google":
                 disconnect("google", query.get("id", [""])[0])
             elif path == "/microsoft":

@@ -49,6 +49,10 @@ DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y --no-install-recommends 
   python3-icalendar \
   python3-cryptography \
   python3-tk \
+  python3-pip \
+  python3-cffi \
+  python3-requests \
+  alsa-utils \
   matchbox-keyboard \
   iw
 
@@ -100,7 +104,28 @@ server {
     # Keep SD card writes low.
     access_log off;
 
+    location ^~ /api/voice/ {
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+
+        proxy_pass http://127.0.0.1:8791/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header Connection '';
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 86400s;
+        chunked_transfer_encoding off;
+    }
+
+    # Calendar tokens, Wi-Fi, and timezone changes. Only the kiosk browser,
+    # which loads the board from 127.0.0.1, may call this.
     location /api/ {
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+
         proxy_pass http://127.0.0.1:8787/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
@@ -159,6 +184,17 @@ if [ -f "$HERE/calendar-broker/homeboard-calendar.py" ]; then
   $SUDO systemctl daemon-reload
   $SUDO systemctl enable homeboard-calendar
   $SUDO systemctl restart homeboard-calendar || true
+fi
+
+echo "== Voice transcripts =="
+if [ -f "$HERE/homeboard-voice.py" ]; then
+  $SUDO cp "$HERE/homeboard-voice.py" /usr/local/lib/homeboard/homeboard-voice.py
+  $SUDO cp "$HERE/homeboard-voice.service" /etc/systemd/system/homeboard-voice.service
+  $SUDO chmod 755 /usr/local/lib/homeboard/homeboard-voice.py
+  $SUDO python3 -m pip install --break-system-packages vosk || true
+  $SUDO systemctl daemon-reload
+  $SUDO systemctl enable homeboard-voice
+  $SUDO systemctl restart homeboard-voice || true
 fi
 
 echo "== Kiosk launcher =="
@@ -230,6 +266,7 @@ while true; do
 
   "$BROWSER" \
     --kiosk \
+    --autoplay-policy=no-user-gesture-required \
     --start-fullscreen \
     --window-position=0,0 \
     --window-size="${WIN_W:-1920},${WIN_H:-1080}" \
@@ -248,6 +285,8 @@ while true; do
     --disable-component-update \
     --check-for-update-interval=31536000 \
     --overscroll-history-navigation=0 \
+    --use-fake-ui-for-media-stream \
+    --alsa-input-device=plughw:CARD=L48K2Ch,DEV=0 \
     --remote-debugging-port=9222 \
     --remote-debugging-address=127.0.0.1 \
     --remote-allow-origins=* \

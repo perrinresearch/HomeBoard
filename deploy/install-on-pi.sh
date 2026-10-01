@@ -3,6 +3,9 @@
 set -euo pipefail
 
 rsync -a --delete /tmp/homeboard-build/ /var/www/homeboard/
+if [ -f /tmp/homeboard-broker/asound.conf ]; then
+  install -m 644 /tmp/homeboard-broker/asound.conf /etc/asound.conf
+fi
 chown -R www-data:www-data /var/www/homeboard
 mkdir -p /var/lib/homeboard /etc/homeboard /usr/local/lib/homeboard
 if [ ! -f /etc/homeboard/calendar.env ]; then
@@ -26,6 +29,10 @@ if ! visudo -cf /etc/sudoers.d/homeboard-wifi; then
   exit 1
 fi
 install -m 644 /tmp/homeboard-broker/homeboard-calendar.service /etc/systemd/system/homeboard-calendar.service
+if [ -f /tmp/homeboard-broker/homeboard-voice.py ]; then
+  install -m 755 /tmp/homeboard-broker/homeboard-voice.py /usr/local/lib/homeboard/homeboard-voice.py
+  install -m 644 /tmp/homeboard-broker/homeboard-voice.service /etc/systemd/system/homeboard-voice.service
+fi
 install -m 644 /tmp/homeboard-broker/nginx-homeboard.conf /etc/nginx/sites-available/homeboard
 chown -R www-data:www-data /var/lib/homeboard
 # Restart the broker before optional package installs so Settings is not left
@@ -33,6 +40,24 @@ chown -R www-data:www-data /var/lib/homeboard
 systemctl daemon-reload
 systemctl enable homeboard-calendar
 systemctl restart homeboard-calendar
+if [ -f /usr/local/lib/homeboard/homeboard-voice.py ]; then
+  DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-cffi python3-requests alsa-utils || true
+  python3 -c "import vosk" 2>/dev/null || python3 -m pip install --break-system-packages vosk
+  MODEL_DIR=/usr/local/share/homeboard/vosk-model-small-en-us-0.15
+  if [ ! -d "$MODEL_DIR" ]; then
+    mkdir -p /usr/local/share/homeboard /tmp/homeboard-vosk
+    ZIP=/tmp/homeboard-vosk/vosk-model-small-en-us-0.15.zip
+    if [ ! -f "$ZIP" ]; then
+      curl -L --retry 3 --max-time 180 -o "$ZIP" https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+    fi
+    python3 - "$ZIP" /usr/local/share/homeboard << 'PY'
+import sys, zipfile
+zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])
+PY
+  fi
+  systemctl enable homeboard-voice
+  systemctl restart homeboard-voice
+fi
 DEBIAN_FRONTEND=noninteractive apt-get install -y python3-icalendar python3-cryptography python3-tk matchbox-keyboard iw || true
 install -m 755 /tmp/homeboard-broker/homeboard-oauth-assist.py /usr/local/bin/homeboard-oauth-assist.py
 mkdir -p /usr/local/share/homeboard/oauth-keyboard
@@ -43,6 +68,37 @@ from pathlib import Path
 path = Path("/usr/local/bin/homeboard-kiosk.sh")
 text = path.read_text().replace("\r\n", "\n").replace("\r", "\n")
 changed = False
+if "alsa-input-device" not in text:
+    if "--use-fake-ui-for-media-stream \\\n" in text:
+        text = text.replace(
+            "--use-fake-ui-for-media-stream \\\n",
+            "--use-fake-ui-for-media-stream \\\n"
+            "    --alsa-input-device=plughw:CARD=L48K2Ch,DEV=0 \\\n",
+            1,
+        )
+        changed = True
+    elif "--use-fake-ui-for-media-stream " in text:
+        text = text.replace(
+            "--use-fake-ui-for-media-stream ",
+            "--use-fake-ui-for-media-stream --alsa-input-device=plughw:CARD=L48K2Ch,DEV=0 ",
+            1,
+        )
+        changed = True
+if "use-fake-ui-for-media-stream" not in text:
+    if "--overscroll-history-navigation=0 \\\n" in text:
+        text = text.replace(
+            "--overscroll-history-navigation=0 \\\n",
+            "--overscroll-history-navigation=0 \\\n"
+            "    --use-fake-ui-for-media-stream \\\n",
+            1,
+        )
+    else:
+        text = text.replace(
+            "--overscroll-history-navigation=0 ",
+            "--overscroll-history-navigation=0 --use-fake-ui-for-media-stream ",
+            1,
+        )
+    changed = True
 if "remote-debugging-port=9222" not in text:
     text = text.replace(
         "--overscroll-history-navigation=0 \\\n",
@@ -55,29 +111,30 @@ if "remote-debugging-port=9222" not in text:
     changed = True
 if "oauth-keyboard" not in text:
     import re
-    url_line = re.search(r'(?m)^[ \t]*["\']?\$URL["\']?[ \t]*$', text)
-    if not url_line:
-        raise SystemExit('kiosk script has no "$URL" browser launch line')
-    extension_lines = (
-        "    --load-extension=/usr/local/share/homeboard/oauth-keyboard \\\n"
-        "    --disable-extensions-except=/usr/local/share/homeboard/oauth-keyboard \\\n"
-    )
-    text = text[:url_line.start()] + extension_lines + text[url_line.start():]
-
-    def add_switch(match):
-        features = match.group(1)
-        if "DisableLoadExtensionCommandLineSwitch" in features:
-            return match.group(0)
-        return "--disable-features=" + features + ",DisableLoadExtensionCommandLineSwitch"
-
-    text, count = re.subn(r"--disable-features=([^\s\\]+)", add_switch, text, count=1)
-    if count == 0:
-        text = text.replace(
-            extension_lines,
-            "    --disable-features=DisableLoadExtensionCommandLineSwitch \\\n" + extension_lines,
-            1,
+    url_line = re.search(r'(?m)["\']?\$URL["\']?[ \t]*$', text)
+    if url_line:
+        extension_lines = (
+            "    --load-extension=/usr/local/share/homeboard/oauth-keyboard \\\n"
+            "    --disable-extensions-except=/usr/local/share/homeboard/oauth-keyboard \\\n"
         )
-    changed = True
+        text = text[:url_line.start()] + extension_lines + text[url_line.start():]
+
+        def add_switch(match):
+            features = match.group(1)
+            if "DisableLoadExtensionCommandLineSwitch" in features:
+                return match.group(0)
+            return "--disable-features=" + features + ",DisableLoadExtensionCommandLineSwitch"
+
+        text, count = re.subn(r"--disable-features=([^\s\\]+)", add_switch, text, count=1)
+        if count == 0:
+            text = text.replace(
+                extension_lines,
+                "    --disable-features=DisableLoadExtensionCommandLineSwitch \\\n" + extension_lines,
+                1,
+            )
+        changed = True
+    else:
+        print('kiosk script has no "$URL" browser launch line; skipped extension flags')
 if "homeboard-oauth-assist.py" not in text:
     text = text.replace(
         'mkdir -p "$PROFILE"\n',

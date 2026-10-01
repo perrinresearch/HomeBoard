@@ -7,7 +7,7 @@ import {
   User
 } from 'firebase/auth';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { AppState, CalendarEvent, Chore, FamilyMember, ShoppingItem, Sport } from '../types';
+import { AppState, BoardReminder, BoardTimer, CalendarEvent, Chore, FamilyMember, ShoppingItem, Sport } from '../types';
 import { firebaseAuth, firebaseDb, firebaseEnabled } from './firebaseApp';
 import { normalizeAppState } from './storageService';
 
@@ -23,6 +23,8 @@ export interface HouseholdRecord {
   localEvents: CalendarEvent[];
   sports: Sport[];
   remoteEvents: CalendarEvent[];
+  timers?: BoardTimer[];
+  reminders?: BoardReminder[];
 }
 
 let activeUid: string | null = null;
@@ -73,7 +75,9 @@ export function sharedSlice(state: AppState) {
     chores: state.choreConfig.chores,
     shopping: state.shoppingList,
     localEvents: state.calendarConfig.events,
-    sports: state.sportsConfig.sports
+    sports: state.sportsConfig.sports,
+    timers: state.timers,
+    reminders: state.reminders
   };
 }
 
@@ -89,6 +93,8 @@ export function applyHousehold(prev: AppState, data: HouseholdRecord): AppState 
       events: data.localEvents
     },
     sportsConfig: { members, sports: data.sports },
+    timers: data.timers ?? prev.timers ?? [],
+    reminders: data.reminders ?? prev.reminders ?? [],
     settings: prev.settings,
     widgets: prev.widgets,
     weatherLocations: prev.weatherLocations
@@ -104,7 +110,9 @@ function recordFromSnapshot(data: Record<string, unknown>): HouseholdRecord {
     shopping: revived.shopping || [],
     localEvents: revived.localEvents || [],
     sports: revived.sports || [],
-    remoteEvents: revived.remoteEvents || []
+    remoteEvents: revived.remoteEvents || [],
+    timers: 'timers' in data ? (revived.timers || []) : undefined,
+    reminders: 'reminders' in data ? (revived.reminders || []) : undefined
   };
 }
 
@@ -123,12 +131,16 @@ export function parseCloudEvents(events: CalendarEvent[]): CalendarEvent[] {
   });
 }
 
-async function registerWithBroker(uid: string) {
+async function registerWithBroker(user: User) {
   try {
+    const idToken = await user.getIdToken();
     await fetch('/api/household', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: uid })
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`
+      },
+      body: '{}'
     });
   } catch {
     // The board still copies remote events itself when it can reach the broker.
@@ -150,7 +162,7 @@ export async function createHousehold(email: string, state: AppState): Promise<s
     ...jsonReady(sharedSlice(state)),
     remoteEvents: []
   }, { merge: true });
-  await registerWithBroker(credential.user.uid);
+  await registerWithBroker(credential.user);
   return code;
 }
 
@@ -162,7 +174,7 @@ export async function joinHousehold(email: string, code: string): Promise<void> 
   const credential = await signInWithEmailAndPassword(auth, email.trim(), code.trim());
   window.localStorage.setItem(CODE_KEY, code.trim());
   window.localStorage.setItem(EMAIL_KEY, email.trim());
-  await registerWithBroker(credential.user.uid);
+  await registerWithBroker(credential.user);
 }
 
 export async function leaveHousehold(): Promise<void> {
@@ -200,7 +212,7 @@ export function watchHouseholdUser(onUser: (user: User | null) => void): () => v
   return onAuthStateChanged(auth, (user) => {
     activeUid = user?.uid || null;
     if (user) {
-      void registerWithBroker(user.uid);
+      void registerWithBroker(user);
     }
     onUser(user);
   });

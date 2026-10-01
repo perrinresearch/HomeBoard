@@ -26,7 +26,7 @@ Open `http://localhost:3000`. Fill in `.env.local` before you rely on weather or
 
 Without Firebase keys the board still runs. Family, chores, shopping, and sports stay in that browser only. Settings → Board → Household says the keys are missing.
 
-Calendar sign-in does not work in this preview. Google and Microsoft redirect to `http://127.0.0.1` on the Pi. Connect those accounts from the kiosk.
+Calendar sign-in does not work in this preview. Google and Microsoft redirect to `http://127.0.0.1` on the Pi, and nginx allows `/api/` only from the kiosk itself. Connect those accounts on the board.
 
 ## 2. Firebase
 
@@ -108,11 +108,13 @@ The build you flash or push must already contain the Firebase and weather keys f
 
 After the dashboard is on screen:
 
-- **Settings → Board** — Wi-Fi, household, timezone
+- **Settings → Board** — Wi-Fi, household, timezone, how long the screen stays on before the clock, and the alarm tone
 - **Settings → Appearance** — theme
 - **Settings → Family** — people
 - **Settings → Calendars** — Google, Microsoft, and Apple
 - **Settings → Sports** — sports for those people
+
+**Timer** and **Reminder** sit beside Settings. Anything running, due, or coming up in the next 12 hours also shows on the sleep clock. When one is due, the board plays the alarm chosen under Settings → Board and shows a Stop button. Speaking the reminder aloud is tracked in [FUTURE.md](FUTURE.md).
 
 ## 4. Calendars
 
