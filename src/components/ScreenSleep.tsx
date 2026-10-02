@@ -2,15 +2,10 @@ import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { BoardReminder, BoardTimer } from '../types';
 import { alertViews } from '../services/alerts';
+import { subscribeWake, wakeScreen } from '../services/screenWake';
+import { subscribeVoice, voiceSnapshot } from '../services/voiceListen';
 
-const WAKE_EVENT = 'homeboard-wake';
-
-/**
- * Wake the clock screen. Touch and the HomeBoard wake word call this.
- */
-export function wakeScreen(): void {
-  window.dispatchEvent(new Event(WAKE_EVENT));
-}
+export { wakeScreen } from '../services/screenWake';
 
 const Sleep = styled.button`
   position: fixed;
@@ -90,14 +85,42 @@ const ScreenSleep: React.FC<ScreenSleepProps> = ({ timeoutMinutes, timers, remin
     arm();
     window.addEventListener('pointerdown', wake, true);
     window.addEventListener('keydown', wake, true);
-    window.addEventListener(WAKE_EVENT, wake);
+    const unsubWake = subscribeWake(() => wake());
+    const unsubVoice = subscribeVoice(() => {
+      const voice = voiceSnapshot();
+      if (voice.woke || voice.listening) {
+        wake();
+      }
+    });
     return () => {
       window.clearTimeout(timer);
       window.removeEventListener('pointerdown', wake, true);
       window.removeEventListener('keydown', wake, true);
-      window.removeEventListener(WAKE_EVENT, wake);
+      unsubWake();
+      unsubVoice();
     };
   }, [timeoutMinutes]);
+
+  useEffect(() => {
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } };
+    let lock: { release: () => Promise<void> } | null = null;
+    const request = () => {
+      void nav.wakeLock?.request('screen').then(next => {
+        lock = next;
+      }).catch(() => undefined);
+    };
+    request();
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        request();
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      void lock?.release();
+    };
+  }, []);
 
   useEffect(() => {
     if (!asleep) {
@@ -115,7 +138,7 @@ const ScreenSleep: React.FC<ScreenSleepProps> = ({ timeoutMinutes, timers, remin
   const views = alertViews(timers, reminders, now.getTime());
 
   return (
-    <Sleep type="button" aria-label="Screen is asleep. Touch to wake." onClick={() => wakeScreen()}>
+    <Sleep type="button" aria-label="Screen is asleep. Touch or say HomeBoard to wake." onClick={() => wakeScreen()}>
       <Time>{now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</Time>
       <DateLine>{now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</DateLine>
       {views.length > 0 && (

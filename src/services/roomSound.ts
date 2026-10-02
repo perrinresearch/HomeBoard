@@ -1,4 +1,4 @@
-import { wakeScreen } from '../components/ScreenSleep';
+import { wakeScreen } from './screenWake';
 
 let pauseCapture: (() => void) | null = null;
 let resumeCapture: (() => void) | null = null;

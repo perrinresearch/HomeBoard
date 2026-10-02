@@ -12,6 +12,10 @@ if [ ! -f /etc/homeboard/calendar.env ]; then
   cp /tmp/homeboard-broker/calendar.env.example /etc/homeboard/calendar.env
   chmod 600 /etc/homeboard/calendar.env
 fi
+if [ -f /tmp/homeboard-broker/voice.env.example ] && [ ! -f /etc/homeboard/voice.env ]; then
+  cp /tmp/homeboard-broker/voice.env.example /etc/homeboard/voice.env
+  chmod 600 /etc/homeboard/voice.env
+fi
 install -m 755 /tmp/homeboard-broker/homeboard-calendar.py /usr/local/lib/homeboard/homeboard-calendar.py
 install -m 644 /tmp/homeboard-broker/firestore_push.py /usr/local/lib/homeboard/firestore_push.py
 install -o root -g root -m 755 /tmp/homeboard-broker/set-timezone /usr/local/lib/homeboard/set-timezone
@@ -35,13 +39,18 @@ if [ -f /tmp/homeboard-broker/homeboard-voice.py ]; then
 fi
 install -m 644 /tmp/homeboard-broker/nginx-homeboard.conf /etc/nginx/sites-available/homeboard
 chown -R www-data:www-data /var/lib/homeboard
+if [ ! -f /var/lib/homeboard/voice.json ]; then
+  printf '%s\n' '{"mode":"off","ollamaUrl":"","ollamaModel":"llama3.2"}' > /var/lib/homeboard/voice.json
+fi
+chown homeboard:homeboard /var/lib/homeboard/voice.json
+chmod 640 /var/lib/homeboard/voice.json
 # Restart the broker before optional package installs so Settings is not left
 # talking to an old process if apt-get later fails.
 systemctl daemon-reload
 systemctl enable homeboard-calendar
 systemctl restart homeboard-calendar
 if [ -f /usr/local/lib/homeboard/homeboard-voice.py ]; then
-  DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-cffi python3-requests alsa-utils || true
+  DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip python3-cffi python3-requests alsa-utils espeak-ng || true
   python3 -c "import vosk" 2>/dev/null || python3 -m pip install --break-system-packages vosk
   MODEL_DIR=/usr/local/share/homeboard/vosk-model-small-en-us-0.15
   if [ ! -d "$MODEL_DIR" ]; then
@@ -57,6 +66,30 @@ PY
   fi
   systemctl enable homeboard-voice
   systemctl restart homeboard-voice
+  PIPER_DIR=/usr/local/lib/homeboard/piper
+  PIPER_SHARE=/usr/local/share/homeboard/piper
+  mkdir -p "$PIPER_DIR" "$PIPER_SHARE" /tmp/homeboard-piper
+  if [ ! -x "$PIPER_DIR/piper" ]; then
+    curl -L --retry 3 --max-time 180 -o /tmp/homeboard-piper/piper.tar.gz \
+      https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_aarch64.tar.gz || true
+    if [ -f /tmp/homeboard-piper/piper.tar.gz ]; then
+      rm -rf /tmp/homeboard-piper/out
+      mkdir -p /tmp/homeboard-piper/out
+      tar -xzf /tmp/homeboard-piper/piper.tar.gz -C /tmp/homeboard-piper/out || true
+      if [ -x /tmp/homeboard-piper/out/piper/piper ]; then
+        cp -a /tmp/homeboard-piper/out/piper/. "$PIPER_DIR/" || true
+      elif [ -x /tmp/homeboard-piper/out/piper ]; then
+        cp -a /tmp/homeboard-piper/out/. "$PIPER_DIR/" || true
+      fi
+      chmod 755 "$PIPER_DIR/piper" 2>/dev/null || true
+    fi
+  fi
+  if [ ! -f "$PIPER_SHARE/en_US-lessac-medium.onnx" ]; then
+    curl -L --retry 3 --max-time 300 -o "$PIPER_SHARE/en_US-lessac-medium.onnx" \
+      https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx || true
+    curl -L --retry 3 --max-time 60 -o "$PIPER_SHARE/en_US-lessac-medium.onnx.json" \
+      https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json || true
+  fi
 fi
 DEBIAN_FRONTEND=noninteractive apt-get install -y python3-icalendar python3-cryptography python3-tk matchbox-keyboard iw || true
 install -m 755 /tmp/homeboard-broker/homeboard-oauth-assist.py /usr/local/bin/homeboard-oauth-assist.py
@@ -155,6 +188,26 @@ if "pgrep -f /usr/local/bin/homeboard-oauth-assist.py" not in text:
     )
     if old in text:
         text = text.replace(old, new, 1)
+        changed = True
+if "disable-background-timer-throttling" not in text:
+    text = text.replace(
+        "--overscroll-history-navigation=0 \\\n",
+        "--overscroll-history-navigation=0 \\\n"
+        "    --disable-background-timer-throttling \\\n"
+        "    --disable-renderer-backgrounding \\\n"
+        "    --disable-backgrounding-occluded-windows \\\n",
+        1,
+    )
+    changed = True
+if "IntensiveWakeUpThrottling" not in text:
+    import re
+    text, count = re.subn(
+        r"--disable-features=([^\s\\]+)",
+        lambda match: match.group(0) if "IntensiveWakeUpThrottling" in match.group(1) else "--disable-features=" + match.group(1) + ",IntensiveWakeUpThrottling",
+        text,
+        count=1,
+    )
+    if count:
         changed = True
 if changed:
     path.write_text(text)

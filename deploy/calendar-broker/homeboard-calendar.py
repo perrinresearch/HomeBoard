@@ -770,8 +770,8 @@ def remember_household(authorization):
     return household_id
 
 
-def publish_events():
-    payload = collect_events()
+def publish_events(force=False):
+    payload = collect_events(force=force)
     events = payload.get("events") or []
     if not events:
         return payload
@@ -783,10 +783,13 @@ def publish_events():
     return payload
 
 
-def collect_events():
-    cached = read_json(CACHE_PATH, None)
-    if cached and cached.get("expires", 0) > time.time():
-        return cached["payload"]
+def collect_events(force=False):
+    if force:
+        CACHE_PATH.unlink(missing_ok=True)
+    else:
+        cached = read_json(CACHE_PATH, None)
+        if cached and cached.get("expires", 0) > time.time():
+            return cached["payload"]
     start = now_utc() - WINDOW_PAST
     end = now_utc() + WINDOW_FUTURE
     events = []
@@ -1244,6 +1247,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(set_wifi(body.get("ssid", ""), body.get("password", "")))
             elif path == "/household":
                 self.send_json({"id": remember_household(self.headers.get("Authorization"))})
+            elif path == "/events/sync":
+                self.send_json(publish_events(force=True))
             else:
                 self.send_json({"error": "Not found"}, 404)
         except Exception as error:  # noqa: BLE001

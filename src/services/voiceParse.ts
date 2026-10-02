@@ -3,7 +3,8 @@ import { BoardReminder, BoardTimer } from '../types';
 export type VoiceCommand =
   | { kind: 'stop' }
   | { kind: 'timer'; timer: BoardTimer }
-  | { kind: 'reminder'; reminder: BoardReminder };
+  | { kind: 'reminder'; reminder: BoardReminder }
+  | { kind: 'shop'; item: string };
 
 const ONES: Record<string, number> = {
   zero: 0, oh: 0, one: 1, two: 2, three: 3, four: 4, five: 5,
@@ -203,5 +204,75 @@ export function parseVoiceCommand(spoken: string): VoiceCommand | null {
     };
   }
 
+  const shop = text.match(/\b(?:add|put|buy)\s+(.+?)\s+(?:to|on)\s+(?:the\s+)?(?:shopping\s+)?list\b/)
+    || text.match(/\b(?:add|put)\s+(.+?)\s+to\s+shopping\b/);
+  if (shop) {
+    const item = shop[1].replace(/\b(some|a|an|the)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    if (item && !/\b(timer|reminder|alarm)\b/.test(item)) {
+      return { kind: 'shop', item };
+    }
+  }
+
+  return null;
+}
+
+export interface RemoteVoicePayload {
+  kind?: string;
+  label?: string;
+  minutes?: number;
+  hour?: number;
+  minute?: number;
+  meridiem?: string;
+  reply?: string;
+}
+
+/** Turn a model JSON payload into the same command the spoken parser returns. */
+export function commandFromRemote(payload: RemoteVoicePayload): VoiceCommand | null {
+  const kind = (payload.kind || '').trim().toLowerCase();
+  if (kind === 'stop') {
+    return { kind: 'stop' };
+  }
+  if (kind === 'timer') {
+    const minutes = Number(payload.minutes);
+    const ms = Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes * 60000) : null;
+    if (!ms || ms < 1000) {
+      return null;
+    }
+    const label = (payload.label || '').trim() || timerLabel(`${minutes} minutes`, ms);
+    return {
+      kind: 'timer',
+      timer: {
+        id: `${Date.now()}`,
+        label,
+        durationMs: ms,
+        endsAt: Date.now() + ms
+      }
+    };
+  }
+  if (kind === 'reminder') {
+    const hour = Number(payload.hour);
+    const minute = Number(payload.minute || 0);
+    const merRaw = (payload.meridiem || '').trim().toLowerCase();
+    const meridiem = merRaw.startsWith('p') ? 'pm' as const : merRaw.startsWith('a') ? 'am' as const : undefined;
+    if (!Number.isFinite(hour)) {
+      return null;
+    }
+    const at = nextClock(hour, Number.isFinite(minute) ? minute : 0, meridiem);
+    if (!at) {
+      return null;
+    }
+    return {
+      kind: 'reminder',
+      reminder: {
+        id: Date.now().toString(),
+        label: (payload.label || '').trim() || 'Reminder',
+        at: at.getTime()
+      }
+    };
+  }
+  if (kind === 'shop') {
+    const item = (payload.label || '').trim();
+    return item ? { kind: 'shop', item } : null;
+  }
   return null;
 }

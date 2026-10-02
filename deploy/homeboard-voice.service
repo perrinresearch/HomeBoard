@@ -9,6 +9,7 @@ User=homeboard
 Group=audio
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=HOMEBOARD_VOSK_MODEL=/usr/local/share/homeboard/vosk-model-small-en-us-0.15
+EnvironmentFile=-/etc/homeboard/voice.env
 ExecStart=/usr/bin/python3 /usr/local/lib/homeboard/homeboard-voice.py
 Restart=on-failure
 RestartSec=3

@@ -26,6 +26,8 @@ interface ScheduleBoardProps {
   onOpenChores: () => void;
   onChangeShopping: (items: ShoppingItem[]) => void;
   onAddEvent: (title: string, start: Date, memberId: string) => void;
+  onReloadCalendars?: () => void | Promise<void>;
+  calendarsBusy?: boolean;
 }
 
 function tint(color: string, alpha: number): string {
@@ -102,6 +104,11 @@ const Ghost = styled.button`
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
 `;
 
 const Segmented = styled.div`
@@ -817,7 +824,9 @@ const ScheduleBoard: React.FC<ScheduleBoardProps> = ({
   onAddChore,
   onOpenChores,
   onChangeShopping,
-  onAddEvent
+  onAddEvent,
+  onReloadCalendars,
+  calendarsBusy = false
 }) => {
   const [view, setView] = useState<View>('week');
   const [cursor, setCursor] = useState(() => new Date());
@@ -933,6 +942,16 @@ const ScheduleBoard: React.FC<ScheduleBoardProps> = ({
             )}
           </Title>
           <Ghost onClick={() => setCursor(new Date())}>Today</Ghost>
+          {onReloadCalendars ? (
+            <Ghost
+              type="button"
+              disabled={calendarsBusy}
+              aria-busy={calendarsBusy}
+              onClick={() => { void Promise.resolve(onReloadCalendars()).catch(() => undefined); }}
+            >
+              {calendarsBusy ? 'Reloading…' : 'Reload'}
+            </Ghost>
+          ) : null}
           <Segmented>
             {(['month', 'week', 'day'] as View[]).map(item => (
               <Segment key={item} active={view === item} onClick={() => setView(item)}>

@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { WeatherLocation, CalendarConfig, ChoreConfig, SportsConfig, AppState, CalendarEvent, FamilyMember, AppSettings, WeatherData, DailyForecast } from './types';
 import { WeatherService } from './services/weatherService';
 import { ChoreService } from './services/choreService';
 import { SportsService } from './services/sportsService';
-import { CalendarService, WifiStatus, calendarOwners, calendarFetchNotice } from './services/calendarService';
+import { CalendarService, RemoteEventsResponse, WifiStatus, calendarOwners, calendarFetchNotice } from './services/calendarService';
 import { SettingsService } from './services/settingsService';
 import { loadAppState, saveAppState } from './services/storageService';
 import { pushRemoteEvents, useHouseholdSync } from './services/householdService';
@@ -79,6 +79,14 @@ const todayKey = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
+
+function parseCalendarWhen(value: string, allDay?: boolean): Date {
+  if (allDay || /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+  return new Date(value);
+}
 
 const Clock = styled.div`
   display: flex;
@@ -214,7 +222,10 @@ const App: React.FC = () => {
   const [apiEvents, setApiEvents] = useState<CalendarEvent[] | null>(null);
   const [cloudEvents, setCloudEvents] = useState<CalendarEvent[]>([]);
   const [calendarNotice, setCalendarNotice] = useState('');
+  const [calendarSyncing, setCalendarSyncing] = useState(false);
   const remoteEvents = apiEvents ?? cloudEvents;
+  const boardRef = useRef({ appState, remoteEvents });
+  boardRef.current = { appState, remoteEvents };
   const onCloudEvents = useCallback((events: CalendarEvent[]) => {
     setCloudEvents(events);
   }, []);
@@ -273,35 +284,52 @@ const App: React.FC = () => {
     })();
   }, []);
 
+  const applyRemoteEvents = useCallback((body: RemoteEventsResponse) => {
+    const notice = calendarFetchNotice(body);
+    setCalendarNotice(notice);
+    if (notice) {
+      setApiEvents(null);
+      return;
+    }
+    const events = body.events.map(event => ({
+      ...event,
+      start: parseCalendarWhen(event.start, event.allDay),
+      end: parseCalendarWhen(event.end, event.allDay)
+    }));
+    setApiEvents(events);
+    void pushRemoteEvents(events);
+  }, []);
+
+  const reloadCalendars = useCallback(async (force = false) => {
+    const body = force ? await CalendarService.syncEvents() : await CalendarService.fetchEvents();
+    applyRemoteEvents(body);
+  }, [applyRemoteEvents]);
+
+  const handleReloadCalendars = useCallback(async () => {
+    if (calendarSyncing) {
+      return;
+    }
+    setCalendarSyncing(true);
+    try {
+      await reloadCalendars(true);
+    } catch (error) {
+      setCalendarNotice('Calendar could not load events. Open Settings → Calendars.');
+      setApiEvents(null);
+      throw error;
+    } finally {
+      setCalendarSyncing(false);
+    }
+  }, [calendarSyncing, reloadCalendars]);
+
   useEffect(() => {
-    const parseWhen = (value: string, allDay?: boolean) => {
-      if (allDay || /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        const [year, month, day] = value.slice(0, 10).split('-').map(Number);
-        return new Date(year, month - 1, day);
-      }
-      return new Date(value);
-    };
     let stop = false;
     const load = async () => {
       try {
         const body = await CalendarService.fetchEvents();
-        if (stop) {
-          return;
+        if (!stop) {
+          applyRemoteEvents(body);
         }
-        const notice = calendarFetchNotice(body);
-        setCalendarNotice(notice);
-        if (notice) {
-          setApiEvents(null);
-          return;
-        }
-        const events = body.events.map(event => ({
-          ...event,
-          start: parseWhen(event.start, event.allDay),
-          end: parseWhen(event.end, event.allDay)
-        }));
-        setApiEvents(events);
-        void pushRemoteEvents(events);
-      } catch (error) {
+      } catch {
         if (!stop) {
           setApiEvents(null);
         }
@@ -313,7 +341,7 @@ const App: React.FC = () => {
       stop = true;
       window.clearInterval(id);
     };
-  }, []);
+  }, [applyRemoteEvents]);
 
   useEffect(() => {
     let stop = false;
@@ -443,7 +471,35 @@ const App: React.FC = () => {
 
   useEffect(() => listenForVoiceCommands({
     addTimer: (timer) => setAppState(prev => ({ ...prev, timers: [...(prev.timers || []), timer] })),
-    addReminder: (reminder) => setAppState(prev => ({ ...prev, reminders: [...(prev.reminders || []), reminder] }))
+    addReminder: (reminder) => setAppState(prev => ({ ...prev, reminders: [...(prev.reminders || []), reminder] })),
+    addShopping: (item) => setAppState(prev => ({
+      ...prev,
+      shoppingList: [...prev.shoppingList, { id: `${Date.now()}`, title: item, checked: false }]
+    })),
+    boardContext: () => {
+      const { appState: state, remoteEvents: events } = boardRef.current;
+      const shopping = state.shoppingList.filter(item => !item.checked).map(item => item.title);
+      const chores = ChoreService.getDueTodayChores(state.choreConfig).map(chore => chore.title);
+      const now = Date.now();
+      const timers = (state.timers || []).filter(timer => timer.endsAt > now).map(timer => timer.label);
+      const reminders = (state.reminders || []).filter(reminder => reminder.at > now).map(reminder => reminder.label);
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      const today = events
+        .filter(event => event.start >= start && event.start < end)
+        .slice(0, 8)
+        .map(event => event.title);
+      return [
+        'Board data:',
+        shopping.length ? `Shopping: ${shopping.join(', ')}` : 'Shopping: (empty)',
+        chores.length ? `Chores due: ${chores.join(', ')}` : 'Chores due: none',
+        timers.length ? `Timers: ${timers.join(', ')}` : '',
+        reminders.length ? `Reminders: ${reminders.join(', ')}` : '',
+        today.length ? `Today: ${today.join(', ')}` : ''
+      ].filter(Boolean).join('\n');
+    }
   }), []);
 
   useEffect(() => {
@@ -547,6 +603,8 @@ const App: React.FC = () => {
           onAddChore={(title, memberId) => handleChoreConfigChange(ChoreService.addChore(appState.choreConfig, title, '', memberId, 'weekly', 1))}
           onOpenChores={() => setShowChores(true)}
           onChangeShopping={(shoppingList) => setAppState(prev => ({ ...prev, shoppingList }))}
+          onReloadCalendars={handleReloadCalendars}
+          calendarsBusy={calendarSyncing}
           onAddEvent={(title, start, memberId) => handleCalendarConfigChange({
             ...appState.calendarConfig,
             events: [...appState.calendarConfig.events, {
@@ -596,6 +654,7 @@ const App: React.FC = () => {
             onChoresChange={handleChoreConfigChange}
             onSportsChange={handleSportsConfigChange}
             onWifiChange={setWifi}
+            onReloadCalendars={handleReloadCalendars}
           />
         )}
         <OnScreenKeyboard />

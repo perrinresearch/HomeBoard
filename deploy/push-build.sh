@@ -22,7 +22,7 @@ CI=false npm run build
 
 echo "== Uploading to $TARGET =="
 rsync -av --delete build/ "$TARGET:/tmp/homeboard-build/"
-rsync -av deploy/calendar-broker/ deploy/nginx-homeboard.conf deploy/install-on-pi.sh deploy/homeboard-oauth-assist.py deploy/asound.conf deploy/homeboard-voice.py deploy/homeboard-voice.service "$TARGET:/tmp/homeboard-broker/"
+rsync -av deploy/calendar-broker/ deploy/nginx-homeboard.conf deploy/install-on-pi.sh deploy/homeboard-oauth-assist.py deploy/asound.conf deploy/homeboard-voice.py deploy/homeboard-voice.service deploy/voice.env.example "$TARGET:/tmp/homeboard-broker/"
 rsync -av deploy/oauth-keyboard/ "$TARGET:/tmp/homeboard-broker/oauth-keyboard/"
 
 echo "== Publishing =="

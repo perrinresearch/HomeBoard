@@ -7,6 +7,7 @@ Screen timers and reminders already exist. Voice and sound should call the same 
 - `wakeScreen()` in `src/components/ScreenSleep.tsx` wakes the clock screen. Touch uses it, and the “HomeBoard” wake word uses it. Room-sound wake is off so speech recognition can keep the mic.
 - `announceAlert()` in `src/services/alerts.ts` fires a `homeboard-alert` event when a timer finishes or a reminder comes due. `listenForAlerts()` plays the kiosk alarm tone and shows a Stop button. The tone is chosen under Settings → Board → Alarm and stays on that device.
 - `listenForVoiceCommands()` in `src/services/voiceListen.ts` waits for the wake word “HomeBoard”, then turns the next phrase into the same `BoardTimer` / `BoardReminder` objects the on-screen forms create, or calls `stopAlarm()`. A Listening chip shows while it is waiting for that command. The kiosk hears that through on-device transcripts (`homeboard-voice`); it does not change Wi-Fi, timezone, or calendar tokens.
+- After the wake word, the fixed parser runs first. If it does not match, and Settings → Board → Voice is Workstation or Cloud, the transcript is sent to `/api/voice/interpret`. The model returns JSON only (`timer`, `reminder`, `stop`, or `none`). The kiosk applies that the same way as a parsed command. Stop stays local. Secrets stay in `/etc/homeboard/voice.env`; the workstation URL is stored in `/var/lib/homeboard/voice.json`.
 
 ## When the microphone and a language model arrive
 
@@ -14,11 +15,11 @@ Screen timers and reminders already exist. Voice and sound should call the same 
 - Speak a due timer or reminder through the same `homeboard-alert` event, using `detail.label`, after or instead of the tone. `stopAlarm()` should stop that speech as well as the tone.
 - Keep the on-screen notice until someone dismisses it. Stop only silences the sound.
 - Wake the sleep screen when the room gets loud or someone is moving nearby, using `wakeScreen()`. The clock, date, and any active timers or reminders stay on that screen.
-- Confirm by voice that a timer was started or a reminder was saved, so the board is usable without looking at the form.
+- Confirm by voice that a timer was started or a reminder was saved, so the board is usable without looking at the form. Spoken replies use Kokoro on the workstation, with Piper on the Pi if that PC is off.
 
 ## When a language model is connected
 
-- Turn a loose phrase into a timer or reminder ("in 20 minutes", "tomorrow at 7", "when the kids get home" only if a time can be resolved).
+- Turn a loose phrase into a timer or reminder ("in 20 minutes", "tomorrow at 7", "when the kids get home" only if a time can be resolved). Settings → Board → Voice chooses Off, Workstation (Ollama on the home PC), or Cloud. The model never acts on its own: it only returns JSON, and the board creates the same timer or reminder objects the forms create.
 - Answer questions from data the board already has: today's chores, the shopping list, and the calendar.
 - Read a due reminder aloud in a short sentence, including the name and the time, from the same `homeboard-alert` event the tone already uses.
 - Refuse anything that is not a household request. The model should not change Wi-Fi, timezone, or calendar account tokens.

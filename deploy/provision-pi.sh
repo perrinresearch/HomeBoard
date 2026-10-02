@@ -278,13 +278,16 @@ while true; do
     --noerrdialogs \
     --disable-infobars \
     --disable-translate \
-    --disable-features=TranslateUI,DisableLoadExtensionCommandLineSwitch \
+    --disable-features=TranslateUI,DisableLoadExtensionCommandLineSwitch,IntensiveWakeUpThrottling \
     --load-extension=/usr/local/share/homeboard/oauth-keyboard \
     --disable-extensions-except=/usr/local/share/homeboard/oauth-keyboard \
     --disable-session-crashed-bubble \
     --disable-component-update \
     --check-for-update-interval=31536000 \
     --overscroll-history-navigation=0 \
+    --disable-background-timer-throttling \
+    --disable-renderer-backgrounding \
+    --disable-backgrounding-occluded-windows \
     --use-fake-ui-for-media-stream \
     --alsa-input-device=plughw:CARD=L48K2Ch,DEV=0 \
     --remote-debugging-port=9222 \

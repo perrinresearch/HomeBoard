@@ -137,9 +137,14 @@ The build copied to the Pi must already contain the Firebase and weather keys.
 
 Settings on the board:
 
-- **Board** — Wi-Fi, household sign-in, timezone. The header Wi-Fi chip opens
-  this. Saving a timezone restarts the kiosk browser. The dashboard stays up
-  while Wi-Fi reconnects because the kiosk loads from `http://127.0.0.1/`.
+- **Board** — Wi-Fi, household sign-in, timezone, alarm, and voice. Voice can
+  stay on the fixed parser (Off), send unmatched phrases to Ollama on a home PC
+  (Workstation), or use a cloud LLM (Cloud). Cloud needs `VOICE_CLOUD_KEY` in
+  `/etc/homeboard/voice.env`. Spoken replies use Kokoro on the workstation
+  (`deploy/start-workstation-tts.sh`, port 8880, same LAN pattern as Ollama).
+  If that service is down, the Pi speaks with Piper. Saving a timezone restarts
+  the kiosk browser. The dashboard stays up while Wi-Fi reconnects because the
+  kiosk loads from `http://127.0.0.1/`.
 - **Family** — people used by chores, sports, and calendars
 - **Calendars** — connect Gmail, Microsoft, and iCloud links for a person
 - **Appearance** — theme

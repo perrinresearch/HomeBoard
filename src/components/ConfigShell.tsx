@@ -98,6 +98,7 @@ interface ConfigShellProps {
   onChoresChange: (config: ChoreConfig) => void;
   onSportsChange: (config: SportsConfig) => void;
   onWifiChange?: (status: WifiStatus) => void;
+  onReloadCalendars?: () => void | Promise<void>;
 }
 
 const ConfigShell: React.FC<ConfigShellProps> = ({
@@ -108,7 +109,8 @@ const ConfigShell: React.FC<ConfigShellProps> = ({
   onSettingsChange,
   onChoresChange,
   onSportsChange,
-  onWifiChange
+  onWifiChange,
+  onReloadCalendars
 }) => (
   <Scrim onClick={onClose}>
     <Sheet onClick={(event) => event.stopPropagation()}>
@@ -130,7 +132,7 @@ const ConfigShell: React.FC<ConfigShellProps> = ({
           <FamilyPanel config={appState.choreConfig} onChange={onChoresChange} />
         )}
         {section === 'calendars' && (
-          <CalendarConnections members={appState.familyMembers} />
+          <CalendarConnections members={appState.familyMembers} onReloadCalendars={onReloadCalendars} />
         )}
         {section === 'sports' && (
           <SportsWidget config={appState.sportsConfig} onConfigChange={onSportsChange} />

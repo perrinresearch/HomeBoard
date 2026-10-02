@@ -4,6 +4,7 @@ import { AppSettings, AppState, ThemeConfig } from '../types';
 import { SettingsService } from '../services/settingsService';
 import { ALARM_OPTIONS, previewAlarm } from '../services/alarm';
 import { CalendarService } from '../services/calendarService';
+import { fetchVoiceConfig, fetchVoiceModels, saveVoiceConfig, VoiceConfig } from '../services/voiceRemote';
 import HouseholdSettings from './HouseholdSettings';
 import WifiPanel from './WifiPanel';
 import { WifiStatus } from '../services/calendarService';
@@ -382,6 +383,15 @@ const Settings: React.FC<SettingsProps> = ({ settings, appState, panel, embedded
   const [zoneQuery, setZoneQuery] = useState('');
   const [timezoneError, setTimezoneError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [voice, setVoice] = useState<VoiceConfig>({
+    mode: 'off',
+    ollamaUrl: '',
+    ollamaModel: 'llama3.2',
+    cloudReady: false
+  });
+  const [voiceError, setVoiceError] = useState('');
+  const [voiceModels, setVoiceModels] = useState<string[]>([]);
+  const [modelsNote, setModelsNote] = useState('');
   const presetThemes = SettingsService.getPresetThemes();
 
   useEffect(() => {
@@ -392,15 +402,27 @@ const Settings: React.FC<SettingsProps> = ({ settings, appState, panel, embedded
           CalendarService.fetchTimezone(),
           CalendarService.fetchTimezones()
         ]);
-        if (cancel) {
-          return;
+        if (!cancel) {
+          setTimezone(current);
+          setSavedTimezone(current);
+          setTimezones(list);
         }
-        setTimezone(current);
-        setSavedTimezone(current);
-        setTimezones(list);
       } catch (error) {
         if (!cancel) {
           setTimezoneError(error instanceof Error ? error.message : 'Timezone settings are unavailable');
+        }
+      }
+    })();
+    (async () => {
+      try {
+        const nextVoice = await fetchVoiceConfig();
+        if (!cancel) {
+          setVoice(nextVoice);
+          setVoiceError('');
+        }
+      } catch (error) {
+        if (!cancel) {
+          setVoiceError(error instanceof Error ? error.message : 'Voice settings are unavailable');
         }
       }
     })();
@@ -408,6 +430,47 @@ const Settings: React.FC<SettingsProps> = ({ settings, appState, panel, embedded
       cancel = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (voice.mode !== 'workstation') {
+      return undefined;
+    }
+    const url = voice.ollamaUrl.trim();
+    if (!url) {
+      setVoiceModels([]);
+      setModelsNote('Enter the workstation address to load models.');
+      return undefined;
+    }
+    let cancel = false;
+    setModelsNote('Loading models…');
+    const timer = window.setTimeout(() => {
+      fetchVoiceModels(url)
+        .then(list => {
+          if (cancel) {
+            return;
+          }
+          setVoiceModels(list);
+          setModelsNote(list.length ? '' : 'No models found on the workstation.');
+          setVoice(current => {
+            if (!list.length || list.includes(current.ollamaModel)) {
+              return current;
+            }
+            const preferred = list.find(name => name === 'llama3.2' || name.startsWith('llama3.2:')) || list[0];
+            return { ...current, ollamaModel: preferred };
+          });
+        })
+        .catch(() => {
+          if (!cancel) {
+            setVoiceModels([]);
+            setModelsNote('Could not load models from that address.');
+          }
+        });
+    }, 400);
+    return () => {
+      cancel = true;
+      window.clearTimeout(timer);
+    };
+  }, [voice.mode, voice.ollamaUrl]);
 
   const handlePresetSelect = (preset: { name: string; theme: ThemeConfig }) => {
     setLocalSettings({
@@ -539,6 +602,20 @@ const Settings: React.FC<SettingsProps> = ({ settings, appState, panel, embedded
     setSaving(true);
     setTimezoneError('');
     onSettingsChange(localSettings);
+    if (!voiceError) {
+      try {
+        await saveVoiceConfig({
+          mode: voice.mode,
+          ollamaUrl: voice.ollamaUrl,
+          ollamaModel: voice.ollamaModel
+        });
+        setVoiceError('');
+      } catch (error) {
+        setSaving(false);
+        setVoiceError(error instanceof Error ? error.message : 'Could not save voice settings');
+        return;
+      }
+    }
     if (timezone && timezone !== savedTimezone) {
       try {
         await CalendarService.setTimezone(timezone);
@@ -634,7 +711,7 @@ const Settings: React.FC<SettingsProps> = ({ settings, appState, panel, embedded
               <option value={30}>30 minutes</option>
               <option value={60}>1 hour</option>
             </TimezoneSelect>
-            <Hint>The board dims to the clock, then wakes when someone touches it. Save to apply.</Hint>
+            <Hint>The board dims to the clock, then wakes when someone touches it or says HomeBoard. Save to apply.</Hint>
           </FormGroup>
         </Section>}
 
@@ -663,7 +740,66 @@ const Settings: React.FC<SettingsProps> = ({ settings, appState, panel, embedded
               );
             })}
           </AlarmList>
-          <Hint>Say “HomeBoard”, then “timer 10 minutes”, “remind me at 7 to…”, or “stop”. Save to apply.</Hint>
+          <Hint>This tone plays on this board when a timer or reminder comes due. Save to apply.</Hint>
+        </Section>}
+
+        {panel === 'board' && <Section>
+          <SectionTitle>Voice</SectionTitle>
+          <AlarmList role="radiogroup" aria-label="Voice backend">
+            {([
+              { id: 'off' as const, label: 'Off', detail: 'Wake word and the fixed parser only' },
+              { id: 'workstation' as const, label: 'Workstation', detail: 'Ollama on the home PC for loose phrasing' },
+              { id: 'cloud' as const, label: 'Cloud', detail: voice.cloudReady ? 'Cloud LLM when the workstation is off' : 'Add VOICE_CLOUD_KEY on the Pi first' }
+            ]).map(option => {
+              const active = voice.mode === option.id;
+              return (
+                <AlarmRow key={option.id} active={active}>
+                  <AlarmChoice
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setVoice({ ...voice, mode: option.id })}
+                  >
+                    <AlarmName>{option.label}</AlarmName>
+                    <AlarmDetail>{option.detail}</AlarmDetail>
+                  </AlarmChoice>
+                </AlarmRow>
+              );
+            })}
+          </AlarmList>
+          {voice.mode === 'workstation' ? (
+            <>
+              <FormGroup>
+                <Label htmlFor="ollama-url">Workstation address</Label>
+                <Input
+                  id="ollama-url"
+                  value={voice.ollamaUrl}
+                  placeholder="http://192.168.4.10:11434"
+                  onChange={(event) => setVoice({ ...voice, ollamaUrl: event.target.value })}
+                />
+              </FormGroup>
+              <FormGroup>
+                <Label htmlFor="ollama-model">Model</Label>
+                <TimezoneSelect
+                  id="ollama-model"
+                  value={voice.ollamaModel}
+                  disabled={!voiceModels.length && !voice.ollamaModel}
+                  onChange={(event) => setVoice({ ...voice, ollamaModel: event.target.value })}
+                >
+                  {!voice.ollamaModel && <option value="">{modelsNote || 'Loading…'}</option>}
+                  {voice.ollamaModel && !voiceModels.includes(voice.ollamaModel) ? (
+                    <option value={voice.ollamaModel}>{voice.ollamaModel}</option>
+                  ) : null}
+                  {voiceModels.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </TimezoneSelect>
+                {modelsNote ? <Hint>{modelsNote}</Hint> : null}
+              </FormGroup>
+            </>
+          ) : null}
+          <Hint>The board tries the fixed parser first. The model only runs after “HomeBoard” when the parser does not match. Spoken replies use Kokoro on the workstation, or Piper on this board if that PC is off. Save to apply.</Hint>
+          {voiceError ? <FieldError>{voiceError}</FieldError> : null}
         </Section>}
 
         {panel === 'appearance' && <Section>

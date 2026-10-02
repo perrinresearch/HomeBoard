@@ -98,7 +98,16 @@ export class CalendarService {
   }
 
   static async fetchEvents(): Promise<RemoteEventsResponse> {
-    const response = await fetch('/api/events');
+    const response = await fetch('/api/events', { cache: 'no-store' });
+    return readJson<RemoteEventsResponse>(response);
+  }
+
+  static async syncEvents(): Promise<RemoteEventsResponse> {
+    const response = await fetch('/api/events/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    });
     return readJson<RemoteEventsResponse>(response);
   }
 

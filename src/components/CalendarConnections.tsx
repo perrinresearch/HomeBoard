@@ -74,6 +74,11 @@ const Button = styled.button`
     color: var(--hb-text);
     border: 1px solid var(--hb-line);
   }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
 `;
 
 const Input = styled.input`
@@ -87,15 +92,17 @@ const Input = styled.input`
 
 interface CalendarConnectionsProps {
   members: FamilyMember[];
+  onReloadCalendars?: () => void | Promise<void>;
 }
 
-const CalendarConnections: React.FC<CalendarConnectionsProps> = ({ members }) => {
+const CalendarConnections: React.FC<CalendarConnectionsProps> = ({ members, onReloadCalendars }) => {
   const [person, setPerson] = useState(members[0]?.id || PEOPLE);
   const [google, setGoogle] = useState<RemoteAccount[]>([]);
   const [microsoft, setMicrosoft] = useState<RemoteAccount[]>([]);
   const [apple, setApple] = useState<AppleFeed[]>([]);
   const [appleUrl, setAppleUrl] = useState('');
   const [error, setError] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   const applySources = (sources: { google: RemoteAccount[]; microsoft: RemoteAccount[]; apple: AppleFeed[] }) => {
     setGoogle(sources.google);
@@ -142,6 +149,26 @@ const CalendarConnections: React.FC<CalendarConnectionsProps> = ({ members }) =>
   const connect = (provider: 'google' | 'microsoft') => {
     sessionStorage.setItem('homeboard.pendingCalendarOwner', person === 'unassigned' ? '' : person);
     window.location.assign(CalendarService.connectUrl(provider));
+  };
+
+  const reloadAll = async () => {
+    if (syncing) {
+      return;
+    }
+    setSyncing(true);
+    setError('');
+    try {
+      if (onReloadCalendars) {
+        await onReloadCalendars();
+      } else {
+        await CalendarService.syncEvents();
+      }
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not reload calendars');
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const addApple = async () => {
@@ -228,7 +255,12 @@ const CalendarConnections: React.FC<CalendarConnectionsProps> = ({ members }) =>
 
   return (
     <div>
-      <Hint>A calendar can belong to more than one person. Adding it here keeps everyone else who already has it.</Hint>
+      <Row style={{ marginBottom: 12 }}>
+        <Hint style={{ flex: 1, margin: 0 }}>A calendar can belong to more than one person. Adding it here keeps everyone else who already has it.</Hint>
+        <Button type="button" className="quiet" disabled={syncing} onClick={() => { void reloadAll(); }}>
+          {syncing ? 'Reloading…' : 'Reload calendars'}
+        </Button>
+      </Row>
       {error ? <ErrorText>{error}</ErrorText> : null}
       <People>
         <Person type="button" active={person === PEOPLE} color="#5561d6" onClick={() => setPerson(PEOPLE)}>Household</Person>
